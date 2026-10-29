@@ -21,7 +21,7 @@ import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { CompleteProfileModal } from './components/CompleteProfileModal';
 import { usePublicSettings } from './lib/queries';
-import { whatsappLink, WHATSAPP_DISPLAY } from './lib/format';
+import { whatsappLink, WHATSAPP_DISPLAY, SHOP_ADDRESS, SHOP_MAPS_URL } from './lib/format';
 import CatalogPage from './pages/CatalogPage';
 import AgendaPage from './pages/AgendaPage';
 import VehiclesPage from './pages/VehiclesPage';
@@ -238,7 +238,10 @@ export default function App() {
       <footer className="border-t border-line bg-surface pb-24 pt-6 text-sm text-ink-muted lg:pb-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <p>Studio 85 · Estética automotiva · Porto Alegre / RS</p>
+            <p>Studio 85 · Estética automotiva</p>
+            <a href={SHOP_MAPS_URL} target="_blank" rel="noopener noreferrer" className="block hover:text-ink">
+              {SHOP_ADDRESS}
+            </a>
             <nav aria-label="Documentos" className="flex flex-wrap gap-x-4 gap-y-1">
               <Link to="/termos" className="underline hover:text-ink">Termos de Uso</Link>
               <Link to="/privacidade" className="underline hover:text-ink">Privacidade</Link>

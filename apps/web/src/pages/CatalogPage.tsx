@@ -1,10 +1,28 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Clock, MessageCircle, ArrowRight } from 'lucide-react';
+import { CalendarDays, Clock, MessageCircle, ArrowRight, MapPin, Droplets, ShieldCheck, Gauge } from 'lucide-react';
 import { VehicleSizeCategory } from '@autowash/shared';
 import { SizeSelector } from '../components/SizeSelector';
 import { useCatalog } from '../lib/queries';
-import { formatPrice, formatDuration, sizeLabels, whatsappLink } from '../lib/format';
+import { formatPrice, formatDuration, sizeLabels, whatsappLink, SHOP_ADDRESS, SHOP_MAPS_URL } from '../lib/format';
+
+const differentials = [
+  {
+    icon: Droplets,
+    title: 'Produtos Vonixx e Dub Boyz',
+    text: 'Trabalhamos exclusivamente com produtos próprios para estética automotiva.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Sem diesel nem produtos agressivos',
+    text: 'Não utilizamos diesel nem produtos inadequados que possam danificar seu veículo.',
+  },
+  {
+    icon: Gauge,
+    title: 'Equipamentos profissionais',
+    text: 'Tecnologia, qualidade e equipamentos profissionais para entregar o melhor resultado com agilidade.',
+  },
+];
 
 const steps = [
   { title: 'Escolha os serviços', text: 'Um ou mais, feitos no mesmo horário. Veja o valor e o tempo para o seu veículo.' },
@@ -43,8 +61,32 @@ export default function CatalogPage() {
               Agendar pelo WhatsApp
             </a>
           </div>
+          <a
+            href={SHOP_MAPS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-start gap-1.5 text-sm text-ink-muted hover:text-ink"
+          >
+            <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+            <span>
+              {SHOP_ADDRESS} <span className="font-semibold text-accent-text underline">Ver no mapa</span>
+            </span>
+          </a>
         </div>
         <img src="/logo.png" alt="" className="hidden h-40 w-40 object-contain md:block" />
+      </section>
+
+      <section aria-labelledby="diferenciais" className="space-y-4">
+        <h2 id="diferenciais" className="text-xl font-bold text-ink">Por que o Studio 85</h2>
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {differentials.map(({ icon: Icon, title, text }) => (
+            <li key={title} className="card p-5">
+              <Icon className="h-6 w-6 text-accent-text" aria-hidden="true" />
+              <h3 className="mt-3 font-bold text-ink">{title}</h3>
+              <p className="mt-1 text-sm text-ink-muted">{text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section aria-labelledby="servicos-titulo" className="space-y-5">

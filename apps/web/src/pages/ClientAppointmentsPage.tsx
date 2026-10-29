@@ -195,6 +195,37 @@ function AppointmentCard({
 
       {appointment.notes && <p className="mt-3 text-sm text-ink-muted">Observação: {appointment.notes}</p>}
 
+      {appointment.photos.length > 0 && (
+        <div className="mt-4 space-y-3">
+          <h3 className="text-sm font-bold text-ink">Fotos do atendimento</h3>
+          {(['BEFORE', 'AFTER'] as const).map((category) => {
+            const photos = appointment.photos.filter((p) => p.category === category);
+            if (photos.length === 0) return null;
+            const label = category === 'BEFORE' ? 'Antes' : 'Depois';
+            return (
+              <div key={category}>
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-muted">{label}</p>
+                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {photos.map((photo, i) => (
+                    <li key={photo.id}>
+                      <a href={`/api/v1/photos/${photo.id}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl border border-line">
+                        <img
+                          src={`/api/v1/photos/${photo.id}`}
+                          alt={`Foto ${i + 1} de ${label.toLowerCase()} do ${appointment.vehicleLabel}`}
+                          loading="lazy"
+                          className="aspect-square w-full object-cover"
+                        />
+                        <span className="sr-only"> (abre em nova aba)</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
         <p className="text-xs text-ink-muted">
           Código <span className="font-mono font-semibold text-ink">{appointment.code}</span>

@@ -3,6 +3,8 @@ import { VehicleSizeCategory } from '@autowash/shared';
 export const SHOP_TIMEZONE = 'America/Sao_Paulo';
 export const WHATSAPP_NUMBER = '555192198686';
 export const WHATSAPP_DISPLAY = '(51) 9219-8686';
+export const SHOP_ADDRESS = 'R. Amapá, 16 - Cavalhada, Porto Alegre - RS, 91740-460';
+export const SHOP_MAPS_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`Studio 85, ${SHOP_ADDRESS}`)}`;
 
 export function whatsappLink(message: string): string {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;

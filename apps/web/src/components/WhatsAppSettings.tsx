@@ -75,8 +75,8 @@ export function WhatsAppSettings() {
   const connect = useMutation({
     mutationFn: () => api<{ qr: string | null; status: string }>('/admin/whatsapp/connect', { method: 'POST' }),
     onSuccess: (res) => {
-      if (res.status === 'CONNECTED') queryClient.invalidateQueries({ queryKey: ['admin', 'whatsapp'] });
-      else setQr(res.qr);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'whatsapp', 'status'] });
+      if (res.status !== 'CONNECTED') setQr(res.qr);
     },
   });
 

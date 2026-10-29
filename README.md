@@ -66,10 +66,17 @@ Este projeto segue estritamente a política de segurança definida em [`forestse
 - **React Hook Form + Zod**: Formulários resilientes com validação server-aligned compartilhada.
 - **PWA (Vite PWA Plugin)**: Manifest, Service Worker para cache de assets e instalação nativa em Android e iOS.
 
-### Microserviço WhatsApp Bridge
-- **Python (FastAPI na VPS)**:
-  - Serviço independente expondo endpoints autenticados (`POST /messages`, `/status`, callbacks de entrega).
-  - Isolamento absoluto: o backend NestJS nunca toca diretamente em sessões de mensageria, comunicando-se via HTTPS e fila idempotente.
+### Microserviço WhatsApp Bridge (`services/whatsapp-bridge`)
+- **Node.js + Baileys**, no mesmo padrão de rotas do bot do projeto Agenda (estilo Evolution API):
+  - `POST /instance/create` (QR code), `GET /instance/connectionState/:i`, `DELETE /instance/delete/:i`,
+    `POST /message/sendText/:i` e `POST /message/sendMedia/:i` (fotos como imagem).
+  - Autenticação por header `apikey` (= `WHATSAPP_BRIDGE_TOKEN` da API) e webhook de conexão assinado com
+    `WHATSAPP_WEBHOOK_SECRET`. Nenhum segredo no código.
+  - O backend NestJS envia a confirmação do agendamento e o aviso de carro pronto (com as fotos de depois);
+    os textos são editáveis em Configurações e cada envio fica registrado, inclusive falhas.
+  - Rodar: `cd services/whatsapp-bridge && cp .env.example .env` (preencher) `&& npm install && npm start`
+    (em produção, com PM2: `pm2 start server.js --name studio85-whatsapp --node-args="--env-file=.env"`).
+  - A pasta `auth_info/` guarda a sessão do número: não versionar e fazer backup.
 
 ---
 
