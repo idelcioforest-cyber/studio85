@@ -1,0 +1,35 @@
+{
+  "name": "autowash-manager-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Studio 85 — Sistema Integrado de Gestão para Lava-Rápido e Estética Automotiva",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"API,WEB\" -c \"blue,green\" \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run dev --workspace=@autowash/web",
+    "dev:api": "npm run dev --workspace=@autowash/api",
+    "build": "npm run build --workspaces",
+    "prisma:generate": "npm run prisma:generate --workspace=@autowash/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=@autowash/api",
+    "prisma:seed": "npm run prisma:seed --workspace=@autowash/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "keywords": [
+    "autowash",
+    "carwash",
+    "management",
+    "nestjs",
+    "react",
+    "prisma",
+    "mysql"
+  ],
+  "author": "Forest Development Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

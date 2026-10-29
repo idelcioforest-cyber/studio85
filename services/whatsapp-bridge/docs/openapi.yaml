@@ -1,0 +1,119 @@
+openapi: 3.0.3
+info:
+  title: Studio 85 WhatsApp Bridge API (Python Microservice)
+  description: >
+    Serviço desacoplado em Python executando em VPS para despacho de mensagens WhatsApp
+    vinculado ao número da empresa (com suporte a leitura de QR Code ou WhatsApp Cloud API).
+    O backend Node.js interage com este serviço exclusivamente através desta interface autenticada.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Servidor local de desenvolvimento ou mock
+  - url: https://whatsapp-bridge.internal
+    description: Servidor interno na VPS (rede privada)
+
+security:
+  - ServiceTokenAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check e status da sessão
+      description: Retorna o status do serviço, conexão com o WhatsApp e nível da bateria/rede.
+      responses:
+        '200':
+          description: Serviço operacional
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "connected"
+                    enum: [connected, disconnected, qr_ready, connecting]
+                  phone_number:
+                    type: string
+                    example: "+5511999999999"
+                  uptime_seconds:
+                    type: integer
+                    example: 86400
+
+  /session/qr:
+    get:
+      summary: Obter QR Code de autenticação da sessão
+      description: Retorna a imagem ou código do QR Code para pareamento quando desconectado.
+      responses:
+        '200':
+          description: QR Code disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  qr_code:
+                    type: string
+                    description: String base64 ou payload do QR Code
+
+  /messages:
+    post:
+      summary: Enfileirar e enviar mensagem WhatsApp
+      description: Recebe solicitação de envio com garantia de idempotência via `message_id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message_id
+                - recipient_phone
+                - body
+              properties:
+                message_id:
+                  type: string
+                  description: UUID único gerado pelo Node.js para prevenir envios repetidos.
+                  example: "c0a80101-0000-4000-8000-000000000001"
+                recipient_phone:
+                  type: string
+                  description: Telefone no formato E.164 brasileiro (+55DDDXXXXXXXX).
+                  example: "+5551988887777"
+                body:
+                  type: string
+                  description: Conteúdo textual da mensagem (sem CPF ou dados sensíveis).
+                  example: "Olá Carlos! Seu veículo Honda Civic está pronto para retirada no Studio 85."
+                media_url:
+                  type: string
+                  format: uri
+                  description: URL opcional de imagem ou documento temporário.
+      responses:
+        '200':
+          description: Mensagem recebida e agendada para envio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  queue_status:
+                    type: string
+                    example: "queued"
+                  message_id:
+                    type: string
+                    example: "c0a80101-0000-4000-8000-000000000001"
+        '400':
+          description: Dados inválidos ou formato de telefone incorreto
+        '401':
+          description: Token de serviço interno não autorizado
+        '409':
+          description: Message ID já processado (Idempotência garantida)
+
+components:
+  securitySchemes:
+    ServiceTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Bridge-Token
+      description: Chave de autenticação mútua pré-compartilhada entre o backend Node e o microserviço Python.

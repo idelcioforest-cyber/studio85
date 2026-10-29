@@ -1,0 +1,48 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: autowash-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_dev_password_change_me
+      MYSQL_DATABASE: autowash
+      MYSQL_USER: autowash_app
+      MYSQL_PASSWORD: app_dev_password_change_me
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - autowash-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_dev_password_change_me"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: autowash-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_dev_password_change_me
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - autowash-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_password_change_me", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  autowash-network:
+    driver: bridge

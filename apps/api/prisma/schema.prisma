@@ -1,0 +1,806 @@
+// Prisma Schema — Studio 85
+// Database: MySQL 8+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. Usuários, Autenticação e RBAC
+// -----------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+model User {
+  id                      String            @id @default(uuid())
+  name                    String            @db.VarChar(120)
+  // E-mail, celular e CPF ficam vazios no cadastro rápido feito pela equipe (nome + placa)
+  email                   String?           @unique @db.VarChar(150)
+  phone                   String?           @db.VarChar(20)
+  // CPF protegido: cifrado em repouso com AES-256-GCM
+  cpfEncrypted            String?           @map("cpf_encrypted") @db.Text
+  // Hash cego seguro (HMAC-SHA256 com salt do servidor) para buscas indexadas sem expor o CPF
+  cpfLookupHash           String?           @unique @map("cpf_lookup_hash") @db.VarChar(64)
+  passwordHash            String            @map("password_hash") @db.VarChar(255)
+  status                  UserStatus        @default(PENDING_VERIFICATION)
+  // Acesso liberado pela equipe com senha provisória: no primeiro login troca a senha e completa os dados
+  mustChangePassword      Boolean           @default(false) @map("must_change_password")
+  profileIncomplete       Boolean           @default(false) @map("profile_incomplete")
+  emailVerifiedAt         DateTime?         @map("email_verified_at")
+  emailVerificationCode   String?           @map("email_verification_code") @db.VarChar(6)
+  emailVerificationSentAt DateTime?         @map("email_verification_sent_at")
+  passwordResetToken      String?           @map("password_reset_token") @db.VarChar(128)
+  passwordResetExpiresAt  DateTime?         @map("password_reset_expires_at")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+
+  roles                   UserRole[]
+  addresses               Address[]
+  vehicles                Vehicle[]
+  appointments            Appointment[]
+  assignedWorkOrders      WorkOrder[]       @relation("TechnicianWorkOrders")
+  uploadedMedia           MediaAsset[]      @relation("UserUploadedMedia")
+  orders                  Order[]
+  couponRedemptions       CouponRedemption[]
+  auditLogs               AuditLog[]
+  legalAcceptances        LegalAcceptance[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique @db.VarChar(50) // ADMIN, MANAGER, ATTENDANT, WASHER, CLIENT
+  description String?          @db.VarChar(255)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  slug        String           @unique @db.VarChar(80) // ex: appointments:create, finance:view
+  description String?          @db.VarChar(255)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// -----------------------------------------------------------------------------
+// 2. Endereços do Cliente & Telebusca (Leva-e-Traz)
+// -----------------------------------------------------------------------------
+
+model Address {
+  id             String        @id @default(uuid())
+  userId         String        @map("user_id")
+  label          String        @default("Residencial") @db.VarChar(50) // Casa, Trabalho, etc.
+  street         String        @db.VarChar(150)
+  number         String        @db.VarChar(20)
+  complement     String?       @db.VarChar(100)
+  neighborhood   String        @db.VarChar(100)
+  city           String        @db.VarChar(100)
+  state          String        @db.VarChar(2)
+  postalCode     String        @map("postal_code") @db.VarChar(10)
+  referencePoint String?       @map("reference_point") @db.VarChar(255)
+  isDefault      Boolean       @default(false) @map("is_default")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// -----------------------------------------------------------------------------
+// 3. Garagem do Cliente (Veículos)
+// -----------------------------------------------------------------------------
+
+enum VehicleSizeCategory {
+  SMALL
+  MEDIUM
+  SUV
+  PICKUP
+  SPECIAL
+}
+
+enum VehicleStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Vehicle {
+  id           String              @id @default(uuid())
+  userId       String              @map("user_id")
+  plate        String?             @db.VarChar(10) // Opcional (suporte a veículos novos sem placa)
+  internalCode String              @unique @map("internal_code") @db.VarChar(20) // Identificador legível interno
+  make         String              @db.VarChar(60) // Marca (ex: Honda)
+  model        String              @db.VarChar(80) // Modelo (ex: Civic)
+  year         Int?
+  color        String?             @db.VarChar(40)
+  sizeCategory VehicleSizeCategory @default(MEDIUM) @map("size_category")
+  notes        String?             @db.Text
+  status       VehicleStatus       @default(ACTIVE)
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  workOrders   WorkOrder[]
+
+  @@index([userId])
+  @@index([plate])
+  @@map("vehicles")
+}
+
+// -----------------------------------------------------------------------------
+// 4. Configuração Operacional e Agenda (Modelo Luara + Capacidade Simultânea)
+// -----------------------------------------------------------------------------
+
+model BusinessSettings {
+  id                       String   @id @default(uuid())
+  companyName              String   @default("Studio 85") @map("company_name") @db.VarChar(120)
+  tradeName                String?  @map("trade_name") @db.VarChar(120)
+  phone                    String?  @db.VarChar(20)
+  email                    String?  @db.VarChar(150)
+  address                  String?  @db.VarChar(255)
+  timezone                 String   @default("America/Sao_Paulo") @db.VarChar(50)
+  currency                 String   @default("BRL") @db.VarChar(10)
+  // Chave mestra de Telebusca (Leva-e-Traz)
+  telebuscaEnabled         Boolean  @default(false) @map("telebusca_enabled")
+  telebuscaFeeCents        Int      @default(0) @map("telebusca_fee_cents")
+  // Horas mínimas para cancelamento integral (Regra comercial 4h)
+  cancellationLimitHours   Int      @default(4) @map("cancellation_limit_hours")
+  simultaneousSlotsDefault Int      @default(2) @map("simultaneous_slots_default")
+  // Número do WhatsApp do estabelecimento conectado ao serviço de mensagens
+  whatsappStatus           WhatsAppConnectionStatus @default(DISCONNECTED) @map("whatsapp_status")
+  whatsappStatusAt         DateTime? @map("whatsapp_status_at")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("business_settings")
+}
+
+model BusinessSchedule {
+  id                  String          @id @default(uuid())
+  dayOfWeek           Int             @unique @map("day_of_week") // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  isActive            Boolean         @default(true) @map("is_active")
+  slotIntervalMinutes Int             @default(60) @map("slot_interval_minutes") // 30, 45, 60, 90, 120
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  shifts              ScheduleShift[]
+
+  @@map("business_schedules")
+}
+
+model ScheduleShift {
+  id                   String           @id @default(uuid())
+  businessScheduleId   String           @map("business_schedule_id")
+  shiftName            String           @map("shift_name") @db.VarChar(30) // MANHA, TARDE, NOITE
+  startTime            String           @map("start_time") @db.VarChar(5) // "08:00"
+  endTime              String           @map("end_time") @db.VarChar(5)   // "12:00"
+  simultaneousCapacity Int              @default(2) @map("simultaneous_capacity") // Veículos simultâneos no turno
+  // Vagas extras que só a equipe pode usar (o cliente continua vendo o horário como lotado)
+  overbookTolerance    Int              @default(0) @map("overbook_tolerance")
+  isActive             Boolean          @default(true) @map("is_active")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  businessSchedule     BusinessSchedule @relation(fields: [businessScheduleId], references: [id], onDelete: Cascade)
+
+  @@index([businessScheduleId])
+  @@map("schedule_shifts")
+}
+
+// -----------------------------------------------------------------------------
+// 5. Catálogo de Serviços e Preços por Porte
+// -----------------------------------------------------------------------------
+
+model ServiceCategory {
+  id           String    @id @default(uuid())
+  name         String    @db.VarChar(80)
+  description  String?   @db.VarChar(255)
+  icon         String?   @db.VarChar(50)
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  services     Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id                  String               @id @default(uuid())
+  categoryId          String               @map("category_id")
+  name                String               @db.VarChar(100)
+  description         String?              @db.Text
+  basePriceCents      Int                  @map("base_price_cents") // Preço padrão em centavos
+  baseDurationMinutes Int                  @default(60) @map("base_duration_minutes") // Duração padrão em minutos
+  isActive            Boolean              @default(true) @map("is_active")
+  displayOrder        Int                  @default(0) @map("display_order")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  category            ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priceRules          ServicePriceRule[]
+  appointmentServices AppointmentService[]
+
+  @@index([categoryId])
+  @@map("services")
+}
+
+model ServicePriceRule {
+  id              String              @id @default(uuid())
+  serviceId       String              @map("service_id")
+  sizeCategory    VehicleSizeCategory @map("size_category")
+  priceCents      Int                 @map("price_cents")
+  durationMinutes Int                 @map("duration_minutes")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  service         Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, sizeCategory])
+  @@map("service_price_rules")
+}
+
+// -----------------------------------------------------------------------------
+// 6. Agendamentos e Prevenção de Concorrência
+// -----------------------------------------------------------------------------
+
+enum AppointmentStatus {
+  DRAFT
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECK_IN
+  IN_PROGRESS
+  READY
+  DELIVERED
+  CANCELLED
+  NO_SHOW
+}
+
+enum TelebuscaStatus {
+  PENDING
+  PICKUP_EN_ROUTE
+  AT_SHOP
+  DELIVERY_EN_ROUTE
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentSource {
+  APP      // Agendado pelo cliente cadastrado no app
+  WHATSAPP // Lançado pela equipe a partir de conversa no WhatsApp
+  WALK_IN  // Cliente de balcão registrado na chegada
+}
+
+model Appointment {
+  id                       String               @id @default(uuid())
+  readableCode             String               @unique @map("readable_code") @db.VarChar(20) // Ex: S85-7F3A2C
+  // Nulos apenas em atendimentos de balcão (WALK_IN), sem conta vinculada
+  userId                   String?              @map("user_id")
+  vehicleId                String?              @map("vehicle_id")
+  source                   AppointmentSource    @default(APP)
+  // Snapshot do cliente e do veículo no momento do agendamento
+  customerName             String               @map("customer_name") @db.VarChar(120)
+  customerPhone            String?              @map("customer_phone") @db.VarChar(20)
+  vehiclePlate             String?              @map("vehicle_plate") @db.VarChar(10)
+  vehicleLabel             String               @map("vehicle_label") @db.VarChar(160)
+  vehicleSize              VehicleSizeCategory  @map("vehicle_size")
+  startsAt                 DateTime             @map("starts_at")
+  endsAt                   DateTime             @map("ends_at")
+  status                   AppointmentStatus    @default(CONFIRMED)
+  totalPriceCents          Int                  @map("total_price_cents")
+  priceSnapshotJson        String               @map("price_snapshot_json") @db.Text // Imutabilidade de preços passados
+  cancellationPolicyVer    String               @default("1.0") @map("cancellation_policy_version") @db.VarChar(10)
+  // Telebusca (Leva-e-Traz)
+  isTelebusca              Boolean              @default(false) @map("is_telebusca")
+  telebuscaFeeCents        Int                  @default(0) @map("telebusca_fee_cents")
+  pickupAddressId          String?              @map("pickup_address_id")
+  pickupAddressSnapshot    String?              @map("pickup_address_snapshot") @db.Text
+  deliveryAddressSnapshot  String?              @map("delivery_address_snapshot") @db.Text
+  telebuscaStatus          TelebuscaStatus?     @map("telebusca_status")
+  clientNotes              String?              @map("client_notes") @db.Text
+  cancelledAt              DateTime?            @map("cancelled_at")
+  cancellationReason       String?              @map("cancellation_reason") @db.VarChar(255)
+  createdAt                DateTime             @default(now()) @map("created_at")
+  updatedAt                DateTime             @updatedAt @map("updated_at")
+
+  user                     User?                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  vehicle                  Vehicle?             @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  pickupAddress            Address?             @relation(fields: [pickupAddressId], references: [id], onDelete: SetNull)
+  services                 AppointmentService[]
+  workOrder                WorkOrder?
+  mediaAssets              MediaAsset[]
+  whatsappMessages         WhatsAppMessage[]
+  order                    Order?
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@index([startsAt, endsAt])
+  @@index([status])
+  @@map("appointments")
+}
+
+model AppointmentService {
+  id                  String      @id @default(uuid())
+  appointmentId       String      @map("appointment_id")
+  serviceId           String      @map("service_id")
+  serviceNameSnapshot String      @map("service_name_snapshot") @db.VarChar(100)
+  unitPriceCents      Int         @map("unit_price_cents")
+  durationMinutes     Int         @map("duration_minutes")
+  quantity            Int         @default(1)
+
+  appointment         Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service             Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentId])
+  @@map("appointment_services")
+}
+
+// Bloqueio temporário durante o fluxo de checkout (evita que 2 pessoas comprem o mesmo slot simultaneamente)
+model AppointmentHold {
+  id             String   @id @default(uuid())
+  slotStartsAt   DateTime @map("slot_starts_at")
+  slotEndsAt     DateTime @map("slot_ends_at")
+  sessionToken   String   @map("session_token") @db.VarChar(128)
+  userId         String?  @map("user_id")
+  vehicleId      String?  @map("vehicle_id")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([slotStartsAt, slotEndsAt])
+  @@index([expiresAt])
+  @@map("appointment_holds")
+}
+
+// -----------------------------------------------------------------------------
+// 7. Ordens de Serviço (OS), Checklist e Mídias Antes/Depois
+// -----------------------------------------------------------------------------
+
+enum WorkOrderStatus {
+  CHECK_IN
+  IN_PROGRESS
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+model WorkOrder {
+  id                 String                  @id @default(uuid())
+  appointmentId      String                  @unique @map("appointment_id")
+  orderNumber        String                  @unique @map("order_number") @db.VarChar(30)
+  userId             String                  @map("user_id")
+  vehicleId          String                  @map("vehicle_id")
+  technicianId       String?                 @map("technician_id")
+  status             WorkOrderStatus         @default(CHECK_IN)
+  intakeOdometerKm   Int?                    @map("intake_odometer_km")
+  intakeFuelFraction String?                 @map("intake_fuel_fraction") @db.VarChar(10) // 1/4, 1/2, 3/4, Cheio
+  internalNotes      String?                 @map("internal_notes") @db.Text // Invisível para o cliente
+  clientNotes        String?                 @map("client_notes") @db.Text
+  checklistCompleted Boolean                 @default(false) @map("checklist_completed")
+  startedAt          DateTime?               @map("started_at")
+  completedAt        DateTime?               @map("completed_at")
+  deliveredAt        DateTime?               @map("delivered_at")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+
+  appointment        Appointment             @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  vehicle            Vehicle                 @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  technician         User?                   @relation("TechnicianWorkOrders", fields: [technicianId], references: [id], onDelete: SetNull)
+  checklist          InspectionChecklist?
+  mediaAssets        MediaAsset[]
+  statusEvents       WorkOrderStatusEvent[]
+  order              Order?
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@index([status])
+  @@map("work_orders")
+}
+
+model InspectionChecklist {
+  id              String           @id @default(uuid())
+  workOrderId     String           @unique @map("work_order_id")
+  inspectedById   String           @map("inspected_by_id")
+  belongingsNotes String?          @map("belongings_notes") @db.Text // Objetos deixados no carro
+  clientSignature String?          @map("client_signature") @db.Text // Assinatura ou confirmação digital
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  workOrder       WorkOrder        @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  items           InspectionItem[]
+
+  @@map("inspection_checklists")
+}
+
+model InspectionItem {
+  id          String              @id @default(uuid())
+  checklistId String              @map("checklist_id")
+  partName    String              @map("part_name") @db.VarChar(80) // Para-choque frontal, lateral direita, banco motorista...
+  condition   String              @db.VarChar(30) // OK, RISCADO, AMASSADO, MANCHADO, QUEBRADO
+  notes       String?             @db.VarChar(255)
+
+  checklist   InspectionChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId])
+  @@map("inspection_items")
+}
+
+enum MediaCategory {
+  BEFORE
+  AFTER
+  DAMAGE
+  DURING
+}
+
+enum MediaVisibility {
+  CLIENT_VISIBLE
+  ADMIN_ONLY
+}
+
+model MediaAsset {
+  id              String          @id @default(uuid())
+  workOrderId     String?         @map("work_order_id")
+  appointmentId   String?         @map("appointment_id")
+  category        MediaCategory   @default(BEFORE)
+  storageKey      String          @map("storage_key") @db.VarChar(255) // Chave interna no S3/Storage privado
+  mimeType        String          @map("mime_type") @db.VarChar(60)
+  fileSizeBytes   Int             @map("file_size_bytes")
+  visibility      MediaVisibility @default(CLIENT_VISIBLE)
+  caption         String?         @db.VarChar(255)
+  uploadedById    String          @map("uploaded_by_id")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  workOrder       WorkOrder?      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  uploadedBy      User            @relation("UserUploadedMedia", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([workOrderId])
+  @@index([appointmentId])
+  @@map("media_assets")
+}
+
+model WorkOrderStatusEvent {
+  id          String          @id @default(uuid())
+  workOrderId String          @map("work_order_id")
+  fromStatus  WorkOrderStatus @map("from_status")
+  toStatus    WorkOrderStatus @map("to_status")
+  notes       String?         @db.VarChar(255)
+  authorId    String?         @map("author_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  workOrder   WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("work_order_status_events")
+}
+
+// -----------------------------------------------------------------------------
+// 8. Financeiro, Pagamentos e Reembolsos
+// -----------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id                 String             @id @default(uuid())
+  appointmentId      String?            @unique @map("appointment_id")
+  workOrderId        String?            @unique @map("work_order_id")
+  // Nulo para clientes de balcão (sem conta no app)
+  userId             String?            @map("user_id")
+  status             OrderStatus        @default(PENDING)
+  subtotalCents      Int                @map("subtotal_cents")
+  discountCents      Int                @default(0) @map("discount_cents")
+  telebuscaFeeCents  Int                @default(0) @map("telebusca_fee_cents")
+  totalCents         Int                @map("total_cents")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  appointment        Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  workOrder          WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  user               User?              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments           Payment[]
+  couponRedemptions  CouponRedemption[]
+
+  @@index([userId])
+  @@map("orders")
+}
+
+enum PaymentProvider {
+  MERCADO_PAGO
+  STONE
+  ON_DELIVERY
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH
+  POS_MACHINE
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+  EXPIRED
+  DISPUTED
+}
+
+model Payment {
+  id                    String             @id @default(uuid())
+  orderId               String             @map("order_id")
+  provider              PaymentProvider
+  providerTransactionId String?            @map("provider_transaction_id") @db.VarChar(120)
+  method                PaymentMethod
+  amountCents           Int                @map("amount_cents")
+  status                PaymentStatus      @default(PENDING)
+  rawResponseJson       String?            @map("raw_response_json") @db.Text
+  paidAt                DateTime?          @map("paid_at")
+  // Comprovante opcional de Pix/cartão pago fora do sistema (arquivo em armazenamento privado)
+  receiptStorageKey     String?            @map("receipt_storage_key") @db.VarChar(255)
+  receiptMimeType       String?            @map("receipt_mime_type") @db.VarChar(60)
+  receiptSizeBytes      Int?               @map("receipt_size_bytes")
+  receiptUploadedAt     DateTime?          @map("receipt_uploaded_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  order                 Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds               Refund[]
+  financialEntries      FinancialEntry[]
+
+  @@index([orderId])
+  @@index([providerTransactionId])
+  @@map("payments")
+}
+
+model Refund {
+  id               String         @id @default(uuid())
+  paymentId        String         @map("payment_id")
+  amountCents      Int            @map("amount_cents")
+  reason           String         @db.VarChar(255)
+  providerRefundId String?        @map("provider_refund_id") @db.VarChar(120)
+  status           String         @default("PENDING") @db.VarChar(30)
+  approvedById     String?        @map("approved_by_id")
+  auditNotes       String?        @map("audit_notes") @db.Text
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  payment          Payment        @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  financialEntries FinancialEntry[]
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model FinancialEntry {
+  id          String   @id @default(uuid())
+  paymentId   String?  @map("payment_id")
+  refundId    String?  @map("refund_id")
+  entryType   String   @map("entry_type") @db.VarChar(30) // SALE, REFUND, FEE, CASH_ADJUSTMENT
+  amountCents Int      @map("amount_cents") // Positivo para entrada, negativo para saída
+  description String   @db.VarChar(255)
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+
+  payment     Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  refund      Refund?  @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt])
+  @@map("financial_entries")
+}
+
+// -----------------------------------------------------------------------------
+// 9. Cupons e Promoções
+// -----------------------------------------------------------------------------
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model Coupon {
+  id                   String             @id @default(uuid())
+  code                 String             @unique @db.VarChar(40)
+  description          String?            @db.VarChar(255)
+  discountType         DiscountType       @map("discount_type")
+  discountValue        Int                @map("discount_value") // Porcentagem (10 = 10%) ou centavos (R$ 15,00 = 1500)
+  minOrderCents        Int                @default(0) @map("min_order_cents")
+  maxDiscountCents     Int?               @map("max_discount_cents")
+  maxRedemptionsGlobal Int?               @map("max_redemptions_global")
+  maxRedemptionsPerUser Int               @default(1) @map("max_redemptions_per_user")
+  startsAt             DateTime?          @map("starts_at")
+  endsAt               DateTime?          @map("ends_at")
+  isActive             Boolean            @default(true) @map("is_active")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  redemptions          CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id                   String   @id @default(uuid())
+  couponId             String   @map("coupon_id")
+  userId               String   @map("user_id")
+  orderId              String   @map("order_id")
+  discountAppliedCents Int      @map("discount_applied_cents")
+  redeemedAt           DateTime @default(now()) @map("redeemed_at")
+
+  coupon               Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemptions")
+}
+
+// -----------------------------------------------------------------------------
+// 10. Idempotência de Webhooks, Auditoria & LGPD
+// -----------------------------------------------------------------------------
+
+model WebhookInbox {
+  id           String    @id @default(uuid())
+  provider     String    @db.VarChar(40) // MERCADO_PAGO, STONE
+  eventId      String    @map("event_id") @db.VarChar(120)
+  payloadHash  String    @map("payload_hash") @db.VarChar(64)
+  payloadJson  String    @map("payload_json") @db.Text
+  status       String    @default("PENDING") @db.VarChar(30) // PENDING, PROCESSED, FAILED, IGNORED
+  processedAt  DateTime? @map("processed_at")
+  errorMessage String?   @map("error_message") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, eventId])
+  @@index([status])
+  @@map("webhook_inbox")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?  @map("user_id")
+  action         String   @db.VarChar(80) // ex: appointment.cancelled, refund.approved
+  resource       String   @db.VarChar(60) // appointments, refunds, users
+  resourceId     String?  @map("resource_id") @db.VarChar(120)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.VarChar(255)
+  diffBeforeJson String?  @map("diff_before_json") @db.Text
+  diffAfterJson  String?  @map("diff_after_json") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model LegalDocument {
+  id              String            @id @default(uuid())
+  slug            String            @unique @db.VarChar(60) // privacy_policy, terms_of_use, cancellation_policy
+  version         String            @db.VarChar(20) // 1.0, 1.1
+  title           String            @db.VarChar(150)
+  contentMarkdown String            @map("content_markdown") @db.LongText
+  isActive        Boolean           @default(true) @map("is_active")
+  publishedAt     DateTime          @default(now()) @map("published_at")
+
+  acceptances     LegalAcceptance[]
+
+  @@map("legal_documents")
+}
+
+model LegalAcceptance {
+  id              String        @id @default(uuid())
+  userId          String        @map("user_id")
+  documentId      String        @map("document_id")
+  documentVersion String        @map("document_version") @db.VarChar(20)
+  ipAddress       String?       @map("ip_address") @db.VarChar(45)
+  userAgent       String?       @map("user_agent") @db.VarChar(255)
+  acceptedAt      DateTime      @default(now()) @map("accepted_at")
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document        LegalDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("legal_acceptances")
+}
+
+// -----------------------------------------------------------------------------
+// 11. WhatsApp: modelos de mensagem e registro de envios
+// -----------------------------------------------------------------------------
+
+enum WhatsAppConnectionStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+}
+
+model MessageTemplate {
+  id           String   @id @default(uuid())
+  key          String   @unique @db.VarChar(40) // APPOINTMENT_CONFIRMED, CAR_READY
+  title        String   @db.VarChar(80)
+  body         String   @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  attachPhotos Boolean  @default(false) @map("attach_photos") // Envia as fotos de depois junto
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("message_templates")
+}
+
+enum OutboundMessageStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model WhatsAppMessage {
+  id            String                @id @default(uuid())
+  appointmentId String?               @map("appointment_id")
+  templateKey   String?               @map("template_key") @db.VarChar(40)
+  phone         String                @db.VarChar(20)
+  body          String                @db.Text
+  mediaCount    Int                   @default(0) @map("media_count")
+  status        OutboundMessageStatus
+  externalId    String?               @map("external_id") @db.VarChar(120)
+  error         String?               @db.VarChar(500)
+  createdAt     DateTime              @default(now()) @map("created_at")
+
+  appointment   Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([createdAt])
+  @@map("whatsapp_messages")
+}

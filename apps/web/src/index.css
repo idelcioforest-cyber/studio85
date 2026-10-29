@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Tokens de cor (canais RGB). Contraste verificado contra WCAG 2.2 AA:
+   * texto normal >= 4.5:1 e bordas de campos >= 3:1 sobre canvas, surface e subtle.
+   */
+  :root {
+    color-scheme: light;
+    --canvas: 248 250 252;      /* slate-50 */
+    --surface: 255 255 255;     /* branco */
+    --subtle: 241 245 249;      /* slate-100 */
+    --ink: 15 23 42;            /* slate-900 */
+    --ink-muted: 71 85 105;     /* slate-600 */
+    --line: 226 232 240;        /* slate-200: divisores decorativos */
+    --line-strong: 100 116 139; /* slate-500: bordas de campos */
+    --accent: 245 158 11;       /* amber-500: fundo de botões */
+    --accent-hover: 217 119 6;  /* amber-600 */
+    --accent-ink: 2 6 23;       /* texto sobre o dourado */
+    --accent-text: 146 64 14;   /* amber-800: texto dourado sobre fundo claro */
+    --success: 4 120 87;        /* emerald-700 */
+    --danger: 185 28 28;        /* red-700 */
+    --info: 3 105 161;          /* sky-700 */
+    --warning: 133 77 14;       /* yellow-800 */
+  }
+
+  .dark {
+    color-scheme: dark;
+    --canvas: 9 9 11;           /* zinc-950 */
+    --surface: 24 24 27;        /* zinc-900 */
+    --subtle: 39 39 42;         /* zinc-800 */
+    --ink: 255 255 255;         /* branco */
+    --ink-muted: 212 212 216;   /* zinc-300 */
+    --line: 63 63 70;           /* zinc-700 */
+    --line-strong: 113 113 122; /* zinc-500 */
+    --accent: 245 158 11;
+    --accent-hover: 251 191 36;
+    --accent-ink: 2 6 23;
+    --accent-text: 251 191 36;  /* amber-400 */
+    --success: 52 211 153;      /* emerald-400 */
+    --danger: 248 113 113;      /* red-400 */
+    --info: 125 211 252;        /* sky-300 */
+    --warning: 250 204 21;      /* yellow-400 */
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-color: rgb(var(--canvas));
+    color: rgb(var(--ink));
+  }
+
+  input,
+  select,
+  textarea {
+    color: rgb(var(--ink));
+    background-color: rgb(var(--surface));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--ink-muted));
+    opacity: 0.85;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-semibold text-ink;
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-bold text-accent-ink transition hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-subtle active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-danger/40 px-4 py-2.5 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-wider text-accent-text;
+  }
+}
+
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
