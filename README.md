@@ -77,6 +77,10 @@ Este projeto segue estritamente a política de segurança definida em [`forestse
   - Rodar: `cd services/whatsapp-bridge && cp .env.example .env` (preencher) `&& npm install && npm start`
     (em produção, com PM2: `pm2 start server.js --name studio85-whatsapp --node-args="--env-file=.env"`).
   - A pasta `auth_info/` guarda a sessão do número: não versionar e fazer backup.
+  - **Produção (VPS):** roda em `/root/studio85-whatsapp` com PM2 (`studio85-whatsapp`), ouvindo só em
+    `127.0.0.1:3085`. O acesso de fora passa pelo nginx em `https://wa.studio85poa.com.br` (certificado do
+    certbot). A API usa `WHATSAPP_BRIDGE_URL=https://wa.studio85poa.com.br` e `WHATSAPP_ENABLED=true`.
+    Para atualizar o código da ponte: `VPS=root@IP-DA-VPS ./services/whatsapp-bridge/deploy-vps.sh` (chave SSH).
 
 ---
 
