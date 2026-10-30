@@ -74,6 +74,7 @@ export class SettingsService {
         ...(input.telebuscaFeeCents !== undefined ? { telebuscaFeeCents: input.telebuscaFeeCents } : {}),
         ...(input.cancellationLimitHours !== undefined ? { cancellationLimitHours: input.cancellationLimitHours } : {}),
         ...(input.simultaneousSlotsDefault !== undefined ? { simultaneousSlotsDefault: input.simultaneousSlotsDefault } : {}),
+        ...(input.onlinePaymentsEnabled !== undefined ? { onlinePaymentsEnabled: input.onlinePaymentsEnabled } : {}),
         ...(input.subscriptionsEnabled !== undefined ? { subscriptionsEnabled: input.subscriptionsEnabled } : {}),
         ...(input.onlineFees !== undefined ? { onlineFeesJson: JSON.stringify(input.onlineFees) } : {}),
       },

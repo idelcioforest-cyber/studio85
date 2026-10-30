@@ -54,9 +54,17 @@ export class PagarmeRecipientService {
     return recipient?.status === 'active' && recipient.pagarmeRecipientId ? recipient : null;
   }
 
+  /** Checkout online aberto: Pagar.me pronto, recebedor (ou modo temporário) e o pagamento no app ligado pelo dono */
   async isActive(): Promise<boolean> {
     if (!pagarmeConfig.configured) return false;
+    if (!(await this.ownerEnabled())) return false;
     return Boolean(await this.activeWasher()) || pagarmeConfig.fallbackToPlatform;
+  }
+
+  /** Chave "Pagamento no app" em Configurações */
+  async ownerEnabled(): Promise<boolean> {
+    const settings = await this.prisma.businessSettings.findFirst({ select: { onlinePaymentsEnabled: true } });
+    return settings?.onlinePaymentsEnabled ?? true;
   }
 
   feePercentFor(recipient: PaymentRecipient | null): number {
@@ -64,9 +72,10 @@ export class PagarmeRecipientService {
   }
 
   async adminView() {
-    const recipient = await this.current();
+    const [recipient, ownerEnabled] = await Promise.all([this.current(), this.ownerEnabled()]);
     return {
       configured: pagarmeConfig.configured,
+      ownerEnabled,
       apiReady: pagarmeConfig.apiReady,
       fallbackToPlatform: pagarmeConfig.fallbackToPlatform,
       // O que falta para o checkout abrir (o painel mostra em linguagem simples)

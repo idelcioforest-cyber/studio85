@@ -201,6 +201,8 @@ model BusinessSettings {
   // Número do WhatsApp do estabelecimento conectado ao serviço de mensagens
   whatsappStatus           WhatsAppConnectionStatus @default(DISCONNECTED) @map("whatsapp_status")
   whatsappStatusAt         DateTime?                @map("whatsapp_status_at")
+  // Pagamento no app (Pix/cartão pelo Pagar.me): o dono pode desligar e receber só no local
+  onlinePaymentsEnabled    Boolean                  @default(true) @map("online_payments_enabled")
   // Taxas do Pagar.me repassadas ao cliente e parcelas aceitas (JSON, ver OnlineFeeRates)
   onlineFeesJson           String?                  @map("online_fees_json") @db.Text
   // Assinaturas: só aparecem no painel quando o dono libera; o site nunca divulga

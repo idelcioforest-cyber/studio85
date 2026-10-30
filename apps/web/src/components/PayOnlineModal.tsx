@@ -65,7 +65,7 @@ interface OnlinePayment {
   pix: { qrCode: string; qrCodeImage: string; expiresAt: string } | null;
 }
 
-/** Pagamento online disponível? (Pagar.me configurado e recebedor do lava-jato liberado) */
+/** Pagamento online disponível? (Pagar.me configurado, recebedor liberado e pagamento no app ligado pelo dono) */
 export function useOnlinePayment() {
   return useQuery({
     queryKey: ['payments-online-config'],

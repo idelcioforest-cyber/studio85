@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { encryptSensitiveData } from '../src/common/utils/crypto.util';
 import { PagarmeClient, PagarmeCharge, PagarmeOrder } from '../src/modules/pagarme/pagarme.client';
@@ -69,6 +69,7 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
   let payments: PagarmePaymentsService;
   let webhooks: PagarmeWebhookService;
   let feeRates: jest.SpyInstance;
+  let ownerEnabled: jest.SpyInstance;
   const fake = new FakePagarme();
   const created = { appointments: [] as string[], recipient: '' };
   let userId: string;
@@ -147,6 +148,8 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     // Outros testes rodam em paralelo no mesmo banco: este usa sempre o próprio recebedor
     const recipients = module.get(PagarmeRecipientService);
     jest.spyOn(recipients, 'current').mockImplementation(() => prisma.paymentRecipient.findUnique({ where: { id: created.recipient } }));
+    // A chave do dono fica no banco compartilhado: aqui é simulada para não afetar os outros testes
+    ownerEnabled = jest.spyOn(recipients, 'ownerEnabled').mockResolvedValue(true);
   });
 
   afterAll(async () => {
@@ -304,5 +307,19 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     } finally {
       feeRates.mockResolvedValue(parseOnlineFees(null));
     }
+  });
+
+  it('10. Pagamento no app desligado pelo dono: o app não oferece e não cobra; ligado de novo, volta', async () => {
+    ownerEnabled.mockResolvedValue(false);
+    try {
+      expect(await payments.onlineConfig()).toMatchObject({ enabled: false, publicKey: null });
+      const a = await newAppointment(`TST-OFF-${Date.now() % 100000}`);
+      const before = fake.orders.length;
+      await expect(payments.createPix(userId, a.id)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(fake.orders.length).toBe(before);
+    } finally {
+      ownerEnabled.mockResolvedValue(true);
+    }
+    expect((await payments.onlineConfig()).enabled).toBe(true);
   });
 });

@@ -121,9 +121,12 @@ export class SubscriptionsService {
     const [plan, vehicle, settings] = await Promise.all([
       this.prisma.subscriptionPlan.findUnique({ where: { id: input.planId }, include: { services: true, prices: true } }),
       this.prisma.vehicle.findFirst({ where: { id: input.vehicleId, userId: input.userId, status: 'ACTIVE' } }),
-      this.prisma.businessSettings.findFirst({ select: { onlineFeesJson: true, subscriptionsEnabled: true } }),
+      this.prisma.businessSettings.findFirst({ select: { onlineFeesJson: true, subscriptionsEnabled: true, onlinePaymentsEnabled: true } }),
     ]);
     if (!settings?.subscriptionsEnabled) throw new BadRequestException('Libere as assinaturas em Configurações antes de ativar.');
+    if (!settings.onlinePaymentsEnabled) {
+      throw new BadRequestException('Ligue o pagamento no app em Configurações: a mensalidade é cobrada no cartão pelo Pagar.me.');
+    }
     if (!plan || !plan.isActive) throw new NotFoundException('Plano não encontrado ou desativado.');
     if (!vehicle) throw new NotFoundException('Veículo não encontrado na garagem desse cliente.');
     const price = plan.prices.find((p) => p.sizeCategory === vehicle.sizeCategory);

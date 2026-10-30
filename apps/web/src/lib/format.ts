@@ -67,6 +67,11 @@ export function todayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: SHOP_TIMEZONE }).format(new Date());
 }
 
+/** Dia (AAAA-MM-DD) de um instante ISO no fuso do estabelecimento */
+export function shopDateISO(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: SHOP_TIMEZONE }).format(new Date(iso));
+}
+
 export function addDaysISO(date: string, days: number): string {
   const d = new Date(`${date}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);

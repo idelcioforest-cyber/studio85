@@ -258,6 +258,8 @@ O checkout só aparece com as chaves configuradas e o recebedor do lava-jato **L
 
 Com `PAGARME_FALLBACK_TO_PLATFORM=true` (modo temporário), o checkout abre mesmo sem o recebedor do lava-jato: o valor cai inteiro na conta da plataforma, sem divisão. Quando o recebedor for liberado, a divisão volta sozinha.
 
+**Pagamento no app (chave do dono):** em Configurações → Pagamento no app, o dono pode desligar o pagamento online. Desligado, o app não oferece Pix nem cartão, a API recusa novas cobranças e novas assinaturas, e tudo é pago no local. Pagamentos já feitos, reembolsos, webhooks e a cobrança de quem já assina continuam funcionando.
+
 **Taxa paga pelo cliente:** em Configurações → Pagamento online, o dono informa as taxas do contrato com o Pagar.me (Pix e cartão por número de parcelas, percentual e fixo) e até quantas vezes aceita parcelar. No pagamento online o cliente paga o serviço mais a taxa, em item separado do pedido, inclusive no cartão em 1x; descontada a taxa, chega o preço do serviço. Na Receita a taxa não conta como faturamento.
 
 **Variáveis** (modelo em `infra/.env.example`):

@@ -8,11 +8,13 @@ import { GrantAccessModal } from '../components/GrantAccessModal';
 import { CancelAppointmentModal } from '../components/CancelAppointmentModal';
 import { api } from '../lib/api';
 import {
+  addDaysISO,
   formatDateLong,
   formatDateTime,
   formatPhone,
   formatPlate,
   formatPrice,
+  shopDateISO,
   sizeLabels,
   todayISO,
   adjustmentLabel,
@@ -63,10 +65,28 @@ export default function AdminPatioPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'appointments', date],
-    queryFn: () => api<{ date: string; appointments: Appointment[] }>(`/admin/appointments?date=${date}`),
+    queryFn: () =>
+      api<{ date: string; appointments: Appointment[]; upcoming: Appointment[]; upcomingTotal: number }>(
+        `/admin/appointments?date=${date}`,
+      ),
     refetchInterval: 15_000,
   });
   const appointments = data?.appointments ?? [];
+  // Agendados dos dias seguintes ao escolhido, agrupados por dia
+  const upcoming = data?.upcoming ?? [];
+  const upcomingTotal = data?.upcomingTotal ?? 0;
+  const upcomingDays = upcoming.reduce<{ day: string; items: Appointment[] }[]>((groups, a) => {
+    const day = shopDateISO(a.startsAt);
+    const last = groups[groups.length - 1];
+    if (last?.day === day) last.items.push(a);
+    else groups.push({ day, items: [a] });
+    return groups;
+  }, []);
+  const tomorrow = addDaysISO(todayISO(), 1);
+  const dayTitle = (day: string) => {
+    const text = `${day === tomorrow ? 'Amanhã, ' : ''}${formatDateLong(day)}`;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
 
   const changeStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: AppointmentStatus }) =>
@@ -75,6 +95,7 @@ export default function AdminPatioPage() {
   });
 
   const count = (statuses: AppointmentStatus[]) => appointments.filter((a) => statuses.includes(a.status)).length;
+  const tabCount = (key: string, statuses: AppointmentStatus[]) => count(statuses) + (key === 'CONFIRMED' ? upcomingTotal : 0);
   const visible = appointments.filter((a) => filters.find((f) => f.key === filter)!.statuses.includes(a.status));
 
   const metrics = [
@@ -83,6 +104,132 @@ export default function AdminPatioPage() {
     { label: 'Prontos', value: count(['READY']) },
     { label: 'Entregues', value: count(['DELIVERED']) },
   ];
+
+  // Mesmo card para o dia escolhido e para os próximos dias (estes sem chegada, "não veio" e fotos)
+  const renderCard = (a: Appointment, upcoming = false) => {
+    const action = upcoming ? undefined : nextAction[a.status];
+    const when = formatDateTime(a.startsAt);
+    const busy = changeStatus.isPending && changeStatus.variables?.id === a.id;
+    return (
+      <li key={a.id} className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-bold text-ink">{when.time}</span>
+            <span className="rounded-md border-2 border-ink px-2 py-0.5 font-mono text-sm font-bold text-ink">
+              {formatPlate(a.vehiclePlate)}
+            </span>
+            <span className="font-bold text-ink">{a.vehicleLabel}</span>
+            <span className="text-sm text-ink-muted">· {sizeLabels[a.vehicleSize]}</span>
+          </div>
+          <p className="text-sm text-ink">
+            <span className="font-semibold">{a.services.map((s) => s.name).join(', ')}</span>
+            <span className="text-ink-muted">
+              {' '}
+              · {formatPrice(a.payment.status === 'PAID' ? a.payment.amountCents : a.totalPriceCents)}
+              {a.payment.status === 'PAID' && a.payment.adjustmentCents !== 0 && ` (${adjustmentLabel(a.payment.adjustmentCents).toLowerCase()})`}
+            </span>
+            {a.subscriptionCoveredCents > 0 && <span className="text-success"> · Assinatura</span>}
+            {a.isTelebusca && <span className="text-info"> · Telebusca</span>}
+          </p>
+          <p className="text-sm text-ink-muted">
+            <span className="font-medium text-ink">{a.customerName}</span>
+            {a.customerPhone && (
+              <a href={`tel:${a.customerPhone}`} className="ml-2 inline-flex items-center gap-1 whitespace-nowrap hover:text-ink">
+                <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                {formatPhone(a.customerPhone)}
+              </a>
+            )}
+          </p>
+          <p className="flex items-center gap-2 text-xs text-ink-muted">
+            <span className="rounded border border-line px-1.5 py-0.5 font-semibold">
+              {a.source === 'WALK_IN' ? 'Balcão' : 'App'}
+            </span>
+            <span className="font-mono">{a.code}</span>
+          </p>
+          {a.notes && <p className="text-sm text-ink-muted">Obs.: {a.notes}</p>}
+          {a.status === 'CANCELLED' && a.cancellationReason && (
+            <p className="text-sm text-ink-muted">{a.cancellationReason}</p>
+          )}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {!upcoming && (
+              <button type="button" onClick={() => setPhotosFor(a)} className="btn-secondary px-2.5 py-1.5 text-xs">
+                <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                Fotos{a.photos.length > 0 ? ` (${a.photos.length})` : ''}
+              </button>
+            )}
+            {a.customer && a.customer.appAccess !== 'ACTIVE' && (
+              <button type="button" onClick={() => setAccessFor(a)} className="btn-secondary px-2.5 py-1.5 text-xs">
+                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                {a.customer.appAccess === 'PENDING' ? 'Reenviar acesso' : 'Liberar app'}
+              </button>
+            )}
+            {a.status === 'READY' && a.customerPhone && (
+              <button
+                type="button"
+                disabled={notify.isPending && notify.variables === a.id}
+                onClick={() => notify.mutate(a.id)}
+                className="btn-secondary px-2.5 py-1.5 text-xs"
+              >
+                <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                Avisar no WhatsApp
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 sm:justify-end sm:border-0 sm:pt-0">
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadge[a.status]}`}>
+            {statusLabels[a.status]}
+          </span>
+          {a.payment.status === 'PAID' ? (
+            <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+              {a.payment.provider === 'PAGARME' ? 'Pago online' : 'Pago'} · {paymentMethodLabels[a.payment.method]}
+            </span>
+          ) : a.totalPriceCents === 0 && a.subscriptionCoveredCents > 0 ? (
+            <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+              Coberto pela assinatura
+            </span>
+          ) : (
+            !['CANCELLED', 'NO_SHOW'].includes(a.status) && (
+              <button type="button" onClick={() => setPaying(a)} className="btn-secondary px-3 py-2">
+                Receber
+              </button>
+            )
+          )}
+          {['CONFIRMED', 'CHECK_IN'].includes(a.status) && a.payment.status !== 'PAID' && (
+            <button type="button" disabled={busy} onClick={() => setCancelling(a)} className="btn-secondary px-3 py-2">
+              Desmarcar
+            </button>
+          )}
+          {a.status === 'CONFIRMED' && !upcoming && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm('Marcar como não compareceu? O horário será liberado.')) {
+                  changeStatus.mutate({ id: a.id, status: 'NO_SHOW' });
+                }
+              }}
+              className="btn-secondary px-3 py-2"
+            >
+              Não veio
+            </button>
+          )}
+          {action && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => changeStatus.mutate({ id: a.id, status: action.status })}
+              className="btn-primary px-3 py-2"
+            >
+              {action.label}
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </li>
+    );
+  };
 
   return (
     <div className="animate-fadeIn space-y-6">
@@ -124,6 +271,17 @@ export default function AdminPatioPage() {
           <div key={m.label} className="card p-4">
             <dt className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{m.label}</dt>
             <dd className="mt-1 text-3xl font-extrabold text-ink">{m.value}</dd>
+            {m.label === 'Agendados' && upcomingTotal > 0 && (
+              <dd className="mt-1">
+                <button
+                  type="button"
+                  onClick={() => setFilter('CONFIRMED')}
+                  className="text-left text-xs font-semibold text-ink-muted underline underline-offset-2 hover:text-ink"
+                >
+                  + {upcomingTotal} nos próximos dias
+                </button>
+              </dd>
+            )}
           </div>
         ))}
       </dl>
@@ -142,7 +300,7 @@ export default function AdminPatioPage() {
                 : 'border-line-strong bg-surface text-ink-muted hover:text-ink'
             }`}
           >
-            {f.label} ({count(f.statuses)})
+            {f.label} ({tabCount(f.key, f.statuses)})
           </button>
         ))}
       </div>
@@ -160,133 +318,45 @@ export default function AdminPatioPage() {
         </p>
       )}
       {!isLoading && !isError && visible.length === 0 && (
-        <p className="card p-10 text-center text-sm text-ink-muted">Nenhum veículo nesta etapa.</p>
+        <p className="card p-10 text-center text-sm text-ink-muted">
+          {filter === 'CONFIRMED' && upcomingTotal > 0 ? 'Nenhum agendado neste dia.' : 'Nenhum veículo nesta etapa.'}
+        </p>
       )}
 
-      <ul className="space-y-3">
-        {visible.map((a) => {
-          const action = nextAction[a.status];
-          const when = formatDateTime(a.startsAt);
-          const busy = changeStatus.isPending && changeStatus.variables?.id === a.id;
-          return (
-            <li key={a.id} className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm font-bold text-ink">{when.time}</span>
-                  <span className="rounded-md border-2 border-ink px-2 py-0.5 font-mono text-sm font-bold text-ink">
-                    {formatPlate(a.vehiclePlate)}
-                  </span>
-                  <span className="font-bold text-ink">{a.vehicleLabel}</span>
-                  <span className="text-sm text-ink-muted">· {sizeLabels[a.vehicleSize]}</span>
-                </div>
-                <p className="text-sm text-ink">
-                  <span className="font-semibold">{a.services.map((s) => s.name).join(', ')}</span>
-                  <span className="text-ink-muted">
-                    {' '}
-                    · {formatPrice(a.payment.status === 'PAID' ? a.payment.amountCents : a.totalPriceCents)}
-                    {a.payment.status === 'PAID' && a.payment.adjustmentCents !== 0 && ` (${adjustmentLabel(a.payment.adjustmentCents).toLowerCase()})`}
-                  </span>
-                  {a.subscriptionCoveredCents > 0 && <span className="text-success"> · Assinatura</span>}
-                  {a.isTelebusca && <span className="text-info"> · Telebusca</span>}
-                </p>
-                <p className="text-sm text-ink-muted">
-                  <span className="font-medium text-ink">{a.customerName}</span>
-                  {a.customerPhone && (
-                    <a href={`tel:${a.customerPhone}`} className="ml-2 inline-flex items-center gap-1 whitespace-nowrap hover:text-ink">
-                      <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-                      {formatPhone(a.customerPhone)}
-                    </a>
-                  )}
-                </p>
-                <p className="flex items-center gap-2 text-xs text-ink-muted">
-                  <span className="rounded border border-line px-1.5 py-0.5 font-semibold">
-                    {a.source === 'WALK_IN' ? 'Balcão' : 'App'}
-                  </span>
-                  <span className="font-mono">{a.code}</span>
-                </p>
-                {a.notes && <p className="text-sm text-ink-muted">Obs.: {a.notes}</p>}
-                {a.status === 'CANCELLED' && a.cancellationReason && (
-                  <p className="text-sm text-ink-muted">{a.cancellationReason}</p>
-                )}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button type="button" onClick={() => setPhotosFor(a)} className="btn-secondary px-2.5 py-1.5 text-xs">
-                    <Camera className="h-3.5 w-3.5" aria-hidden="true" />
-                    Fotos{a.photos.length > 0 ? ` (${a.photos.length})` : ''}
-                  </button>
-                  {a.customer && a.customer.appAccess !== 'ACTIVE' && (
-                    <button type="button" onClick={() => setAccessFor(a)} className="btn-secondary px-2.5 py-1.5 text-xs">
-                      <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-                      {a.customer.appAccess === 'PENDING' ? 'Reenviar acesso' : 'Liberar app'}
-                    </button>
-                  )}
-                  {a.status === 'READY' && a.customerPhone && (
-                    <button
-                      type="button"
-                      disabled={notify.isPending && notify.variables === a.id}
-                      onClick={() => notify.mutate(a.id)}
-                      className="btn-secondary px-2.5 py-1.5 text-xs"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                      Avisar no WhatsApp
-                    </button>
-                  )}
-                </div>
-              </div>
+      <ul className="space-y-3">{visible.map((a) => renderCard(a))}</ul>
 
-              <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 sm:justify-end sm:border-0 sm:pt-0">
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadge[a.status]}`}>
-                  {statusLabels[a.status]}
-                </span>
-                {a.payment.status === 'PAID' ? (
-                  <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
-                    {a.payment.provider === 'PAGARME' ? 'Pago online' : 'Pago'} · {paymentMethodLabels[a.payment.method]}
-                  </span>
-                ) : a.totalPriceCents === 0 && a.subscriptionCoveredCents > 0 ? (
-                  <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
-                    Coberto pela assinatura
-                  </span>
-                ) : (
-                  !['CANCELLED', 'NO_SHOW'].includes(a.status) && (
-                    <button type="button" onClick={() => setPaying(a)} className="btn-secondary px-3 py-2">
-                      Receber
-                    </button>
-                  )
-                )}
-                {['CONFIRMED', 'CHECK_IN'].includes(a.status) && a.payment.status !== 'PAID' && (
-                  <button type="button" disabled={busy} onClick={() => setCancelling(a)} className="btn-secondary px-3 py-2">
-                    Desmarcar
-                  </button>
-                )}
-                {a.status === 'CONFIRMED' && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (window.confirm('Marcar como não compareceu? O horário será liberado.')) {
-                        changeStatus.mutate({ id: a.id, status: 'NO_SHOW' });
-                      }
-                    }}
-                    className="btn-secondary px-3 py-2"
-                  >
-                    Não veio
-                  </button>
-                )}
-                {action && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => changeStatus.mutate({ id: a.id, status: action.status })}
-                    className="btn-primary px-3 py-2"
-                  >
-                    {action.label}
-                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
+      {filter === 'CONFIRMED' && upcomingDays.length > 0 && (
+        <section className="space-y-4" aria-labelledby="patio-proximos">
+          <h2 id="patio-proximos" className="pt-2 text-lg font-bold text-ink">
+            Próximos dias ({upcomingTotal})
+          </h2>
+          {upcomingDays.map((group) => (
+            <div key={group.day} className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-ink">
+                  {dayTitle(group.day)} · {group.items.length} {group.items.length === 1 ? 'agendado' : 'agendados'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDate(group.day);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="btn-secondary px-2.5 py-1.5 text-xs"
+                >
+                  Abrir o dia
+                </button>
               </div>
-            </li>
-          );
-        })}
-      </ul>
+              <ul className="space-y-3">{group.items.map((a) => renderCard(a, true))}</ul>
+            </div>
+          ))}
+          {upcomingTotal > upcoming.length && (
+            <p className="text-sm text-ink-muted">
+              Mostrando os {upcoming.length} primeiros. Escolha o dia no topo para ver os outros.
+            </p>
+          )}
+        </section>
+      )}
 
       <WalkInModal
         open={isWalkInOpen}

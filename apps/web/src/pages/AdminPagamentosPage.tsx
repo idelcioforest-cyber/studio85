@@ -9,6 +9,7 @@ import { centsToInput, formatDateTime, formatPlate, formatPrice, parsePriceInput
 
 interface RecipientState {
   configured: boolean;
+  ownerEnabled: boolean;
   apiReady: boolean;
   fallbackToPlatform: boolean;
   missing: string[];
@@ -355,7 +356,9 @@ function RecipientBanner({ state, loading, onRefresh, refreshing }: { state?: Re
   let tone: 'success' | 'warning' = 'warning';
   let text: string;
   const missing = state.missing.map((name) => MISSING_LABELS[name] ?? name).join(', ');
-  if (!state.apiReady) {
+  if (!state.ownerEnabled) {
+    text = 'Pagamento no app desligado em Configurações: os clientes pagam só no local. Pagamentos já feitos e reembolsos continuam funcionando.';
+  } else if (!state.apiReady) {
     text = `Pagamento online desligado: falta configurar no servidor ${missing}.`;
   } else if (state.fallbackToPlatform && state.configured && r?.status !== 'active') {
     text =

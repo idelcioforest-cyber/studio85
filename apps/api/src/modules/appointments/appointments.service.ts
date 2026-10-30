@@ -71,6 +71,8 @@ const STATUS_FLOW: Record<AppointmentStatus, AppointmentStatus[]> = {
 };
 
 const ACTIVE_STATUSES: AppointmentStatus[] = ['CHECK_IN', 'IN_PROGRESS', 'READY'];
+// Agendados dos dias seguintes mostrados no Pátio
+const UPCOMING_LIMIT = 100;
 
 /**
  * Formato público do agendamento: só o snapshot, sem IDs internos de usuário ou dados sensíveis
@@ -319,18 +321,24 @@ export class AppointmentsService {
     const dayStart = zonedTimeToUtc(day, '00:00', timeZone);
     const dayEnd = zonedTimeToUtc(addDays(day, 1), '00:00', timeZone);
 
-    const list = await this.prisma.appointment.findMany({
-      where: {
-        OR: [
-          { startsAt: { gte: dayStart, lt: dayEnd } },
-          { status: { in: ACTIVE_STATUSES } },
-        ],
-      },
-      include: APPOINTMENT_INCLUDE,
-      orderBy: { startsAt: 'asc' },
-    });
+    const upcomingWhere: Prisma.AppointmentWhereInput = { status: 'CONFIRMED', startsAt: { gte: dayEnd } };
+    const [list, upcoming, upcomingTotal] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          OR: [
+            { startsAt: { gte: dayStart, lt: dayEnd } },
+            { status: { in: ACTIVE_STATUSES } },
+          ],
+        },
+        include: APPOINTMENT_INCLUDE,
+        orderBy: { startsAt: 'asc' },
+      }),
+      // O que vem pela frente depois do dia escolhido, para a equipe se programar
+      this.prisma.appointment.findMany({ where: upcomingWhere, include: APPOINTMENT_INCLUDE, orderBy: { startsAt: 'asc' }, take: UPCOMING_LIMIT }),
+      this.prisma.appointment.count({ where: upcomingWhere }),
+    ]);
 
-    return { date: day, appointments: list.map(toDto) };
+    return { date: day, appointments: list.map(toDto), upcoming: upcoming.map(toDto), upcomingTotal };
   }
 
   async adminUpdateStatus(id: string, input: UpdateAppointmentStatusInput) {

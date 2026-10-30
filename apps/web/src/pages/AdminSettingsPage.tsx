@@ -12,6 +12,7 @@ interface AdminSettings {
   telebuscaEnabled: boolean;
   telebuscaFeeCents: number;
   cancellationLimitHours: number;
+  onlinePaymentsEnabled: boolean;
   subscriptionsEnabled: boolean;
   onlineFees: OnlineFeeRates;
 }
@@ -61,6 +62,7 @@ export default function AdminSettingsPage() {
   const [telebuscaEnabled, setTelebuscaEnabled] = useState(false);
   const [telebuscaFee, setTelebuscaFee] = useState('0,00');
   const [cancellationHours, setCancellationHours] = useState('4');
+  const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(true);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [fees, setFees] = useState<FeeForm | null>(null);
   const [saved, setSaved] = useState(false);
@@ -72,6 +74,7 @@ export default function AdminSettingsPage() {
     setTelebuscaEnabled(data.telebuscaEnabled);
     setTelebuscaFee((data.telebuscaFeeCents / 100).toFixed(2).replace('.', ','));
     setCancellationHours(String(data.cancellationLimitHours));
+    setOnlinePaymentsEnabled(data.onlinePaymentsEnabled);
     setSubscriptionsEnabled(data.subscriptionsEnabled);
     setFees(feeFormOf(data.onlineFees));
   }, [data]);
@@ -86,6 +89,7 @@ export default function AdminSettingsPage() {
           telebuscaEnabled,
           telebuscaFeeCents: Math.round(parseFloat(telebuscaFee.replace(',', '.') || '0') * 100),
           cancellationLimitHours: Number(cancellationHours) || 4,
+          onlinePaymentsEnabled,
           subscriptionsEnabled,
           ...(fees ? { onlineFees: ratesOfForm(fees) } : {}),
         },
@@ -196,7 +200,29 @@ export default function AdminSettingsPage() {
             </div>
           </section>
 
-          {fees && <OnlineFeesSection fees={fees} onChange={setFees} />}
+          <section className="card space-y-4 p-5" aria-labelledby="sec-online">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="sec-online" className="font-bold text-ink">Pagamento no app</h2>
+                <p className="text-sm text-ink-muted">
+                  Ligado, o cliente pode pagar o agendamento pelo app com Pix ou cartão. Desligado, o app não oferece pagamento
+                  online e tudo é pago no local, na retirada. Pagamentos já feitos e reembolsos continuam funcionando.
+                </p>
+              </div>
+              <label className="flex flex-shrink-0 items-center gap-2 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={onlinePaymentsEnabled}
+                  onChange={(e) => setOnlinePaymentsEnabled(e.target.checked)}
+                  className="h-5 w-5 accent-amber-500"
+                />
+                Ligado
+              </label>
+            </div>
+          </section>
+
+          {fees && onlinePaymentsEnabled && <OnlineFeesSection fees={fees} onChange={setFees} />}
 
           <section className="card space-y-4 p-5" aria-labelledby="sec-subs">
             <div className="flex items-start justify-between gap-4">
@@ -206,6 +232,12 @@ export default function AdminSettingsPage() {
                   Liberadas, aparece o menu Assinaturas no painel para você montar os planos e ativar para os clientes. O site não
                   divulga nada: só quem recebe o seu link fica sabendo. Desligar não cancela quem já assina.
                 </p>
+                {subscriptionsEnabled && !onlinePaymentsEnabled && (
+                  <p className="mt-2 text-sm font-semibold text-warning">
+                    Com o pagamento no app desligado, não dá para ativar novas assinaturas nem cadastrar cartões. Quem já assina
+                    continua sendo cobrado.
+                  </p>
+                )}
               </div>
               <label className="flex flex-shrink-0 items-center gap-2 text-sm font-semibold text-ink">
                 <input

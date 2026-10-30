@@ -11,6 +11,7 @@ export const UpdateBusinessSettingsSchema = z.object({
   telebuscaFeeCents: z.number().int().min(0).optional(),
   cancellationLimitHours: z.number().int().min(1).max(72).optional(),
   simultaneousSlotsDefault: z.number().int().min(1).max(20).optional(),
+  onlinePaymentsEnabled: z.boolean().optional(),
   subscriptionsEnabled: z.boolean().optional(),
   onlineFees: z
     .object({
