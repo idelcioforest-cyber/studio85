@@ -9,6 +9,8 @@ import { centsToInput, formatDateTime, formatPlate, formatPrice, parsePriceInput
 
 interface RecipientState {
   configured: boolean;
+  apiReady: boolean;
+  missing: string[];
   platformFeePercent: number;
   recipient:
     | (RecipientView & {
@@ -324,20 +326,29 @@ export default function AdminPagamentosPage() {
   );
 }
 
+const MISSING_LABELS: Record<string, string> = {
+  PAGARME_SECRET_KEY: 'a chave secreta do Pagar.me',
+  PAGARME_PUBLIC_KEY: 'a chave pública do Pagar.me',
+  PAGARME_PLATFORM_RECIPIENT_ID: 'o recebedor da plataforma',
+};
+
 function RecipientBanner({ state, loading, onRefresh, refreshing }: { state?: RecipientState; loading: boolean; onRefresh: () => void; refreshing: boolean }) {
   if (loading || !state) return null;
   const r = state.recipient;
   let tone: 'success' | 'warning' = 'warning';
   let text: string;
-  if (!state.configured) {
-    text = 'Pagamento online desligado: faltam as chaves do Pagar.me no servidor (PAGARME_SECRET_KEY, PAGARME_PUBLIC_KEY e PAGARME_PLATFORM_RECIPIENT_ID).';
+  const missing = state.missing.map((name) => MISSING_LABELS[name] ?? name).join(', ');
+  if (!state.apiReady) {
+    text = `Pagamento online desligado: falta configurar no servidor ${missing}.`;
   } else if (!r?.pagarmeRecipientId) {
     text = 'Cadastre o recebedor do lava-jato (aba Recebedor) para liberar o pagamento online.';
-  } else if (r.status === 'active') {
+  } else if (r.status !== 'active') {
+    text = `Recebedor ${r.statusLabel.toLowerCase()}: o pagamento online só abre quando ficar "Liberado". Faça a verificação de identidade na aba Recebedor.`;
+  } else if (!state.configured) {
+    text = `Recebedor liberado, mas o pagamento online segue desligado: falta configurar no servidor ${missing}.`;
+  } else {
     tone = 'success';
     text = `Recebedor liberado: os clientes já podem pagar pelo app. Comissão da plataforma: ${state.platformFeePercent}%.`;
-  } else {
-    text = `Recebedor ${r.statusLabel.toLowerCase()}: o pagamento online só abre quando ficar "Liberado". Faça a verificação de identidade na aba Recebedor.`;
   }
   const Icon = tone === 'success' ? ShieldCheck : AlertTriangle;
   return (
@@ -351,7 +362,7 @@ function RecipientBanner({ state, loading, onRefresh, refreshing }: { state?: Re
         <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
         <span>{text}</span>
       </p>
-      {state.configured && r?.pagarmeRecipientId && (
+      {state.apiReady && r?.pagarmeRecipientId && (
         <button type="button" onClick={onRefresh} disabled={refreshing} className="btn-secondary flex-shrink-0 px-3 py-2">
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           {refreshing ? 'Consultando…' : 'Atualizar status'}

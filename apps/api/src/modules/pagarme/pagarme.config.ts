@@ -35,6 +35,11 @@ export const pagarmeConfig = {
     const value = Number(process.env.PAGARME_MAX_INSTALLMENTS ?? 1);
     return Number.isInteger(value) && value >= 1 && value <= 12 ? value : 1;
   },
+  /** Basta a chave secreta para cadastrar e consultar o recebedor do lava-jato */
+  get apiReady(): boolean {
+    return Boolean(this.secretKey);
+  },
+  /** Checkout: também precisa da chave pública e do recebedor da plataforma (split) */
   get configured(): boolean {
     return Boolean(this.secretKey && this.publicKey && this.platformRecipientId);
   },

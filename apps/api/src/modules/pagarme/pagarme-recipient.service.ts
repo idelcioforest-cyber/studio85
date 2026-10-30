@@ -62,6 +62,13 @@ export class PagarmeRecipientService {
     const recipient = await this.current();
     return {
       configured: pagarmeConfig.configured,
+      apiReady: pagarmeConfig.apiReady,
+      // O que falta para o checkout abrir (o painel mostra em linguagem simples)
+      missing: [
+        !pagarmeConfig.secretKey && 'PAGARME_SECRET_KEY',
+        !pagarmeConfig.publicKey && 'PAGARME_PUBLIC_KEY',
+        !pagarmeConfig.platformRecipientId && 'PAGARME_PLATFORM_RECIPIENT_ID',
+      ].filter(Boolean) as string[],
       platformFeePercent: this.feePercentFor(recipient),
       recipient: recipient ? this.toDto(recipient) : null,
     };
@@ -110,10 +117,10 @@ export class PagarmeRecipientService {
       ? await this.prisma.paymentRecipient.update({ where: { id: existing.id }, data })
       : await this.prisma.paymentRecipient.create({ data });
 
-    if (!pagarmeConfig.configured) {
+    if (!pagarmeConfig.apiReady) {
       return {
         ...(await this.adminView()),
-        message: 'Dados salvos. Falta configurar as chaves do Pagar.me no servidor para enviar o cadastro.',
+        message: 'Dados salvos. Falta configurar a chave do Pagar.me no servidor para enviar o cadastro.',
       };
     }
 
@@ -170,7 +177,7 @@ export class PagarmeRecipientService {
   }
 
   private async requireRemote() {
-    if (!pagarmeConfig.configured) throw new ServiceUnavailableException('Configure as chaves do Pagar.me no servidor.');
+    if (!pagarmeConfig.apiReady) throw new ServiceUnavailableException('Configure a chave do Pagar.me no servidor.');
     const recipient = await this.current();
     if (!recipient?.pagarmeRecipientId) throw new BadRequestException('Cadastre o recebedor primeiro.');
     return recipient;
