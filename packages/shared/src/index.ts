@@ -1,3 +1,6 @@
+// Primeiro de tudo: configura o zod antes de qualquer schema ser criado
+import './zod-config';
+
 export * from './enums';
 export * from './utils/cpf';
 export * from './utils/plate';

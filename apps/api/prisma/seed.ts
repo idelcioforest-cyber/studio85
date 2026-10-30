@@ -411,10 +411,10 @@ Quando houver pagamento online:
         cpf: '',
       },
       {
-        name: 'Idelcio Forest (Admin)',
+        name: 'Idelcio Forest',
         email: 'idelcioforest@gmail.com',
         password: '12345678',
-        role: 'ADMIN',
+        role: 'CLIENT',
         phone: '51999999999',
         cpf: '11111111111',
       },

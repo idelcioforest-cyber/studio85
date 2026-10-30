@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { Modal } from './Modal';
 import { PasswordInput } from './PasswordInput';
+import { PasswordRules } from './PasswordRules';
 
 /**
  * Primeiro acesso de cliente cadastrado pela equipe: troca a senha provisória e completa os dados.
@@ -79,9 +80,12 @@ export function CompleteProfileModal() {
             <input id="cp-cpf" inputMode="numeric" required value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" className="field" />
           </Field>
         </div>
-        <Field id="cp-password" label="Nova senha" error={fieldError('newPassword')} hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo.">
-          <PasswordInput id="cp-password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
+        <div>
+          <Field id="cp-password" label="Nova senha" error={fieldError('newPassword')}>
+            <PasswordInput id="cp-password" autoComplete="new-password" required aria-describedby="cp-password-rules" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <PasswordRules id="cp-password-rules" value={password} />
+        </div>
         <Field id="cp-confirm" label="Confirme a nova senha">
           <PasswordInput id="cp-confirm" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </Field>
@@ -114,7 +118,8 @@ export function CompleteProfileModal() {
 }
 
 function Field({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string; children: React.ReactElement }) {
-  const describedBy = [hint && !error ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
+  const describedBy =
+    [children.props['aria-describedby'], hint && !error ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
   return (
     <div>
       <label htmlFor={id} className="label">{label}</label>

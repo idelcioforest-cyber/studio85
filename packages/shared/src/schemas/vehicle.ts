@@ -37,7 +37,7 @@ export const CreateVehicleSchema = z.object({
     .nullable(),
   sizeCategory: z
     .nativeEnum(VehicleSizeCategory, {
-      errorMap: () => ({ message: 'Selecione uma categoria de porte válida' }),
+      error: 'Selecione uma categoria de porte válida',
     })
     .default(VehicleSizeCategory.MEDIUM),
   notes: z

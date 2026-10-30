@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { ApiError, errorMessage } from '../lib/api';
 import { Modal } from './Modal';
 import { PasswordInput } from './PasswordInput';
+import { PasswordRules } from './PasswordRules';
 import { LegalDocumentBody, LegalSlug } from './LegalDocument';
 
 type Step = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
@@ -97,7 +98,7 @@ export function AuthModal() {
       setEmail(form.email.trim());
       setPassword(form.password);
       setDevCode(result.devVerificationCode ?? null);
-      setNotice(`Enviamos um código de 6 dígitos para ${form.email.trim()}.`);
+      setNotice(`Enviamos um código de 6 dígitos para ${form.email.trim()}. Se não aparecer na caixa de entrada, olhe no spam.`);
       setStep('verify');
     });
   };
@@ -141,7 +142,7 @@ export function AuthModal() {
       setDevCode(result.devResetCode ?? null);
       setCode('');
       setStep('reset');
-      setNotice(`Se houver uma conta com ${email.trim()}, enviamos um código de 6 dígitos. Ele vale por 15 minutos.`);
+      setNotice(`Se houver uma conta com ${email.trim()}, enviamos um código de 6 dígitos (vale por 15 minutos). Se não aparecer na caixa de entrada, olhe no spam.`);
     });
 
   const handleForgot = (e: React.FormEvent) => {
@@ -342,20 +343,17 @@ export function AuthModal() {
               />
             </Field>
           </div>
-          <Field
-            id="reg-password"
-            label="Senha"
-            hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo."
-            error={fieldError('password')}
-          >
+          <Field id="reg-password" label="Senha" error={fieldError('password')}>
             <PasswordInput
               id="reg-password"
               autoComplete="new-password"
               required
+              aria-describedby="reg-password-rules"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
           </Field>
+          <PasswordRules id="reg-password-rules" value={form.password} />
           <div className="rounded-xl border border-line p-3">
             <p className="text-sm text-ink-muted">
               Antes de criar a conta, leia:{' '}
@@ -418,6 +416,10 @@ export function AuthModal() {
           <button type="button" onClick={handleResend} disabled={loading} className="btn-secondary w-full">
             Reenviar código
           </button>
+          <p className="text-center text-xs text-ink-muted">
+            Não chegou? Confira a caixa de <strong className="font-semibold text-ink">spam</strong> ou lixo eletrônico. O código pode levar
+            alguns minutos.
+          </p>
         </form>
       )}
 
@@ -465,26 +467,29 @@ export function AuthModal() {
               className="field text-center font-mono text-lg tracking-[0.4em]"
             />
           </Field>
-          <Field
-            id="reset-password"
-            label="Nova senha"
-            hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo."
-            error={fieldError('newPassword')}
-          >
-            <PasswordInput
-              id="reset-password"
-              autoComplete="new-password"
-              required
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </Field>
+          <div>
+            <Field id="reset-password" label="Nova senha" error={fieldError('newPassword')}>
+              <PasswordInput
+                id="reset-password"
+                autoComplete="new-password"
+                required
+                aria-describedby="reset-password-rules"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </Field>
+            <PasswordRules id="reset-password-rules" value={newPassword} />
+          </div>
           <button type="submit" disabled={loading || code.length !== 6 || !newPassword} className="btn-primary w-full">
             {loading ? 'Salvando…' : 'Salvar nova senha e entrar'}
           </button>
           <button type="button" onClick={sendResetCode} disabled={loading} className="btn-secondary w-full">
             Reenviar código
           </button>
+          <p className="text-center text-xs text-ink-muted">
+            Não chegou? Confira a caixa de <strong className="font-semibold text-ink">spam</strong> ou lixo eletrônico. O código pode levar
+            alguns minutos.
+          </p>
           <p className="text-center text-xs text-ink-muted">Para evitar abusos, enviamos no máximo um código por minuto.</p>
         </form>
       )}
@@ -514,7 +519,7 @@ function Field({
       </label>
       {React.cloneElement(children, {
         'aria-invalid': error ? true : undefined,
-        'aria-describedby': [hintId, errorId].filter(Boolean).join(' ') || undefined,
+        'aria-describedby': [children.props['aria-describedby'], hintId, errorId].filter(Boolean).join(' ') || undefined,
       })}
       {hint && !error && (
         <p id={hintId} className="mt-1 text-xs text-ink-muted">

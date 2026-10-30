@@ -36,7 +36,7 @@ export const RegisterSchema = z.object({
     .regex(/[0-9]/, 'A senha deve conter ao menos um número')
     .regex(/[^A-Za-z0-9]/, 'A senha deve conter ao menos um caractere especial'),
   acceptTerms: z.literal(true, {
-    errorMap: () => ({ message: 'Você deve aceitar os Termos de Uso e Política de Privacidade' }),
+    error: 'Você deve aceitar os Termos de Uso e Política de Privacidade',
   }),
 });
 
@@ -52,7 +52,7 @@ export const LoginSchema = z.object({
     .toLowerCase()
     .email('E-mail em formato inválido'),
   password: z
-    .string()
+    .string({ error: 'A senha é obrigatória' })
     .min(1, 'A senha é obrigatória'),
   // "Manter conectado neste aparelho": o cookie sobrevive ao fechar o navegador
   remember: z.boolean().optional(),
