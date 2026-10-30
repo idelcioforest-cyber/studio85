@@ -73,7 +73,7 @@ export default function CatalogPage() {
             </span>
           </a>
         </div>
-        <img src="/logo.png" alt="" className="hidden h-40 w-40 object-contain md:block" />
+        <img src="/logo-480.png" alt="" className="hidden h-40 w-40 object-contain md:block" />
       </section>
 
       <section aria-labelledby="diferenciais" className="space-y-4">

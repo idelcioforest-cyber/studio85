@@ -8,6 +8,9 @@ import { LegalDocumentBody, LegalSlug } from './LegalDocument';
 
 type Step = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
 
+// Com "manter conectado", o e-mail volta preenchido no próximo login neste aparelho
+const LAST_EMAIL_KEY = 'studio85_last_email';
+
 const emptyRegister = { name: '', email: '', phone: '', cpf: '', password: '', acceptTerms: false };
 
 export function AuthModal() {
@@ -20,6 +23,7 @@ export function AuthModal() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
   const [form, setForm] = useState(emptyRegister);
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -28,6 +32,12 @@ export function AuthModal() {
   useEffect(() => {
     if (authModal.open) {
       setStep(authModal.mode);
+      try {
+        const saved = localStorage.getItem(LAST_EMAIL_KEY);
+        if (saved) setEmail((current) => current || saved);
+      } catch {
+        // armazenamento indisponível (aba anônima): segue sem preencher
+      }
       setError(null);
       setNotice(null);
       setReadingDoc(null);
@@ -52,7 +62,13 @@ export function AuthModal() {
     e.preventDefault();
     run(async () => {
       try {
-        await login(email.trim(), password);
+        await login(email.trim(), password, remember);
+        try {
+          if (remember) localStorage.setItem(LAST_EMAIL_KEY, email.trim());
+          else localStorage.removeItem(LAST_EMAIL_KEY);
+        } catch {
+          // sem armazenamento: só não lembra o e-mail
+        }
         setPassword('');
         closeAuthModal();
       } catch (err) {
@@ -231,8 +247,9 @@ export function AuthModal() {
             <label htmlFor="login-email" className="label">E-mail</label>
             <input
               id="login-email"
+              name="email"
               type="email"
-              autoComplete="email"
+              autoComplete="username"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -243,12 +260,22 @@ export function AuthModal() {
             <label htmlFor="login-password" className="label">Senha</label>
             <PasswordInput
               id="login-password"
+              name="password"
               autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <div className="mt-1.5 text-right">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-line-strong accent-amber-500"
+                />
+                Manter conectado
+              </label>
               <button type="button" onClick={() => goTo('forgot')} className="text-sm font-semibold text-accent-text underline">
                 Esqueci minha senha
               </button>
@@ -434,7 +461,7 @@ export function AuthModal() {
               maxLength={6}
               required
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/D/g, ''))}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
               className="field text-center font-mono text-lg tracking-[0.4em]"
             />
           </Field>

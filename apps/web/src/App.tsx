@@ -20,6 +20,7 @@ import {
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { CompleteProfileModal } from './components/CompleteProfileModal';
+import { InstallBanner, InstallAppLink } from './components/InstallApp';
 import { usePublicSettings } from './lib/queries';
 import { whatsappLink, WHATSAPP_DISPLAY, SHOP_ADDRESS, SHOP_MAPS_URL } from './lib/format';
 import CatalogPage from './pages/CatalogPage';
@@ -112,7 +113,7 @@ export default function App() {
       <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link to={isAdmin ? '/admin/patio' : '/'} className="flex flex-shrink-0 items-center gap-2.5">
-            <img src="/logo.png" alt="" className="h-9 w-9 object-contain" />
+            <img src="/logo-480.png" alt="" className="h-9 w-9 object-contain" />
             <div className="leading-tight">
               <span className="block text-base font-extrabold tracking-tight text-ink">Studio 85</span>
               <span className="block text-[11px] font-medium text-ink-muted">
@@ -174,6 +175,7 @@ export default function App() {
       </header>
 
       <main id="conteudo" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 pt-6 sm:px-6 sm:pt-8">
+        <InstallBanner />
         <Routes>
           <Route path="/admin/patio" element={adminOnly(<AdminPatioPage />)} />
           <Route path="/admin/agenda" element={adminOnly(<AdminAgendaPage />)} />
@@ -248,15 +250,18 @@ export default function App() {
               <Link to="/cancelamento" className="underline hover:text-ink">Cancelamento</Link>
             </nav>
           </div>
-          <a
-            href={whatsappLink('Olá! Gostaria de falar com o Studio 85.')}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-accent-text"
-          >
-            <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            WhatsApp {WHATSAPP_DISPLAY}
-          </a>
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <a
+              href={whatsappLink('Olá! Gostaria de falar com o Studio 85.')}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-accent-text"
+            >
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />
+              WhatsApp {WHATSAPP_DISPLAY}
+            </a>
+            <InstallAppLink />
+          </div>
         </div>
       </footer>
 

@@ -35,6 +35,9 @@ export interface UploadedFileData {
 type Db = PrismaService | Prisma.TransactionClient;
 type PaymentMethod = PayAppointmentInput['method'];
 
+const formatCents = (cents: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+
 const APPOINTMENT_INCLUDE = {
   // Serviço principal (mais longo) primeiro
   services: { orderBy: { durationMinutes: 'desc' } },
@@ -98,6 +101,9 @@ function toDto(a: AppointmentWithServices) {
           status: 'PAID' as const,
           method: paid.method,
           amountCents: paid.amountCents,
+          // Diferença em relação ao total: positivo = desconto, negativo = acréscimo
+          adjustmentCents: a.totalPriceCents - paid.amountCents,
+          adjustmentReason: a.order?.adjustmentReason ?? null,
           paidAt: paid.paidAt,
           hasReceipt: Boolean(paid.receiptStorageKey),
         }
@@ -248,7 +254,10 @@ export class AppointmentsService {
       orderBy: { startsAt: 'desc' },
       take: 100,
     });
-    return list.map(toDto);
+    // O motivo do ajuste é anotação interna do caixa: não aparece no app do cliente
+    return list.map(toDto).map((a) =>
+      a.payment.status === 'PAID' ? { ...a, payment: { ...a.payment, adjustmentReason: null } } : a,
+    );
   }
 
   async cancelMine(userId: string, id: string) {
@@ -456,9 +465,11 @@ export class AppointmentsService {
 
   /**
    * Recebimento na retirada: registra pedido, pagamento e lançamento no caixa.
+   * O valor cobrado pode diferir do total (desconto ou acréscimo na hora); a diferença fica no pedido.
    * Trava a linha do agendamento para que dois caixas não recebam o mesmo carro.
    */
-  async adminPay(id: string, method: PaymentMethod) {
+  async adminPay(id: string, input: PayAppointmentInput) {
+    const { method } = input;
     await this.prisma.$transaction(
       async (tx) => {
         await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${id} FOR UPDATE`;
@@ -474,36 +485,43 @@ export class AppointmentsService {
           throw new ConflictException('Este atendimento já foi pago.');
         }
 
-        const order =
-          appointment.order ??
-          (await tx.order.create({
-            data: {
-              appointmentId: appointment.id,
-              userId: appointment.userId,
-              subtotalCents: appointment.totalPriceCents - appointment.telebuscaFeeCents,
-              telebuscaFeeCents: appointment.telebuscaFeeCents,
-              totalCents: appointment.totalPriceCents,
-            },
-            include: { payments: true },
-          }));
+        const chargedCents = input.amountCents ?? appointment.totalPriceCents;
+        const adjustmentCents = appointment.totalPriceCents - chargedCents;
+        const adjustmentReason = adjustmentCents !== 0 ? input.adjustmentReason || null : null;
+        const orderData = {
+          subtotalCents: appointment.totalPriceCents - appointment.telebuscaFeeCents,
+          telebuscaFeeCents: appointment.telebuscaFeeCents,
+          discountCents: adjustmentCents,
+          adjustmentReason,
+          totalCents: chargedCents,
+          status: 'PAID' as const,
+        };
+        const order = appointment.order
+          ? await tx.order.update({ where: { id: appointment.order.id }, data: orderData })
+          : await tx.order.create({ data: { ...orderData, appointmentId: appointment.id, userId: appointment.userId } });
 
         const payment = await tx.payment.create({
           data: {
             orderId: order.id,
             provider: 'ON_DELIVERY',
             method,
-            amountCents: order.totalCents,
+            amountCents: chargedCents,
             status: 'PAID',
             paidAt: new Date(),
           },
         });
-        await tx.order.update({ where: { id: order.id }, data: { status: 'PAID' } });
+        const adjustmentNote =
+          adjustmentCents === 0
+            ? ''
+            : ` · ${adjustmentCents > 0 ? 'desconto' : 'acréscimo'} de ${formatCents(Math.abs(adjustmentCents))}${
+                adjustmentReason ? ` (${adjustmentReason})` : ''
+              }`;
         await tx.financialEntry.create({
           data: {
             paymentId: payment.id,
             entryType: 'SALE',
             amountCents: payment.amountCents,
-            description: `${appointment.readableCode} · ${appointment.vehiclePlate ?? appointment.vehicleLabel}`.slice(0, 255),
+            description: `${appointment.readableCode} · ${appointment.vehiclePlate ?? appointment.vehicleLabel}${adjustmentNote}`.slice(0, 255),
           },
         });
       },
@@ -540,7 +558,11 @@ export class AppointmentsService {
 
         await tx.financialEntry.deleteMany({ where: { paymentId: payment.id } });
         await tx.payment.delete({ where: { id: payment.id } });
-        await tx.order.update({ where: { id: appointment.order.id }, data: { status: 'PENDING' } });
+        // Volta ao valor cheio: um novo recebimento pode ter outro ajuste
+        await tx.order.update({
+          where: { id: appointment.order.id },
+          data: { status: 'PENDING', discountCents: 0, adjustmentReason: null, totalCents: appointment.totalPriceCents },
+        });
         return payment.receiptStorageKey;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -855,9 +877,11 @@ export class AppointmentsService {
     });
 
     const byMethod = Object.fromEntries(PAYMENT_METHODS.map((m) => [m, 0])) as Record<PaymentMethod, number>;
+    let discountCents = 0;
     const received = payments.flatMap((p) => {
       if (!p.order.appointment) return [];
       if (p.method in byMethod) byMethod[p.method as PaymentMethod] += p.amountCents;
+      discountCents += Math.max(0, p.order.appointment.totalPriceCents - p.amountCents);
       return [{ appointment: toDto(p.order.appointment) }];
     });
 
@@ -876,6 +900,7 @@ export class AppointmentsService {
       totals: {
         receivedCents: Object.values(byMethod).reduce((acc, v) => acc + v, 0),
         pendingCents: pending.reduce((acc, a) => acc + a.totalPriceCents, 0),
+        discountCents,
         byMethod,
       },
       received: received.map((r) => r.appointment),

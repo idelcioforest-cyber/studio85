@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MessageTemplateKey, UpdateMessageTemplateInput } from '@autowash/shared';
 import { WhatsAppBridgeService, WhatsAppSendError } from './whatsapp-bridge.service';
 import { readStoredFile } from '../../common/utils/private-storage.util';
+import { MailService } from '../mail/mail.service';
 
 // Variáveis aceitas nos modelos de mensagem
 export const TEMPLATE_VARIABLES = [
@@ -21,6 +22,8 @@ export const TEMPLATE_VARIABLES = [
 ] as const;
 
 const MAX_PHOTOS_PER_MESSAGE = 6;
+// Fotos no e-mail de carro pronto: o bastante para mostrar o resultado sem pesar a caixa de entrada
+const MAX_PHOTOS_PER_EMAIL = 4;
 const RETRY_DELAYS_MS = [0, 2000, 6000];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -35,6 +38,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private bridge: WhatsAppBridgeService,
+    private mail: MailService,
   ) {}
 
   render(body: string, values: Record<string, string>): string {
@@ -47,6 +51,7 @@ export class NotificationsService {
         where: { id: appointmentId },
         include: {
           services: { orderBy: { durationMinutes: 'desc' } },
+          user: { select: { email: true } },
           mediaAssets: {
             where: { category: 'AFTER', visibility: 'CLIENT_VISIBLE' },
             orderBy: { createdAt: 'asc' },
@@ -153,10 +158,55 @@ export class NotificationsService {
     }
   }
 
-  /** Dispara sem segurar a resposta da requisição */
+  /**
+   * E-mail do mesmo aviso, para clientes com conta (e-mail cadastrado).
+   * Segue o liga/desliga da mensagem automática em Configurações.
+   */
+  async emailAppointment(appointmentId: string, key: MessageTemplateKey) {
+    const template = await this.prisma.messageTemplate.findUnique({ where: { key } });
+    if (!template?.isActive) return;
+    const { appointment, values } = await this.contextFor(appointmentId);
+    const to = appointment.user?.email;
+    if (!to) return;
+
+    const photos =
+      key === 'CAR_READY'
+        ? await Promise.all(
+            appointment.mediaAssets.slice(0, MAX_PHOTOS_PER_EMAIL).map(async (photo) => ({
+              content: await readStoredFile(photo.storageKey),
+              mimeType: photo.mimeType,
+            })),
+          )
+        : [];
+
+    try {
+      await this.mail.sendAppointmentEmail(
+        to,
+        key,
+        {
+          firstName: values.primeiro_nome,
+          vehicle: values.veiculo,
+          plate: values.placa,
+          services: values.servicos,
+          date: values.data,
+          time: values.hora,
+          total: values.total,
+          code: values.codigo,
+        },
+        photos,
+      );
+    } catch (error) {
+      this.logger.warn(`E-mail não enviado (${key}, ${appointment.readableCode}): ${(error as Error).message}`);
+    }
+  }
+
+  /** Dispara WhatsApp e e-mail sem segurar a resposta da requisição */
   notifyInBackground(appointmentId: string, key: MessageTemplateKey) {
     this.notifyAppointment(appointmentId, key).catch((error) =>
       this.logger.error(`Falha inesperada ao notificar ${appointmentId}: ${(error as Error).message}`),
+    );
+    this.emailAppointment(appointmentId, key).catch((error) =>
+      this.logger.error(`Falha inesperada ao enviar e-mail de ${appointmentId}: ${(error as Error).message}`),
     );
   }
 

@@ -14,6 +14,25 @@ export function formatPrice(cents: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 }
 
+/** "Desconto de R$ 10,00" (positivo) ou "Acréscimo de R$ 5,00" (negativo) */
+export function adjustmentLabel(adjustmentCents: number): string {
+  return `${adjustmentCents > 0 ? 'Desconto' : 'Acréscimo'} de ${formatPrice(Math.abs(adjustmentCents))}`;
+}
+
+/** Valor para editar num campo: 7000 → "70,00" */
+export function centsToInput(cents: number): string {
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
+/** Lê o que foi digitado ("60", "60,50", "R$ 1.234,56", "60.5") em centavos; null se não for um valor válido */
+export function parsePriceInput(value: string): number | null {
+  let v = value.replace(/R\$|\s/g, '');
+  if (!v) return null;
+  if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(v)) return null;
+  return Math.round(Number(v) * 100);
+}
+
 export const sizeLabels: Record<VehicleSizeCategory, string> = {
   [VehicleSizeCategory.SMALL]: 'Compacto',
   [VehicleSizeCategory.MEDIUM]: 'Sedan / Médio',

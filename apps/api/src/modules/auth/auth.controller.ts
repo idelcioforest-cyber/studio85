@@ -104,17 +104,18 @@ export class AuthController {
     @Body(new ZodValidationPipe(LoginSchema)) body: LoginInput,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(body);
+    const { accessToken, cookieMaxAgeMs, ...result } = await this.authService.login(body);
 
     // Cookie seguro HttpOnly/SameSite para proteção contra roubo de tokens via XSS
-    res.cookie('autowash_access_token', result.accessToken, {
+    res.cookie('autowash_access_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 1000 * 60 * 60 * 24, // 1 dia
+      maxAge: cookieMaxAgeMs,
     });
 
+    // O token fica só no cookie HttpOnly: o JavaScript da página nunca o vê
     return result;
   }
 

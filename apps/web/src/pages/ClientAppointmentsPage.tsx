@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, MessageCircle, Check } from 'lucide-react';
 import { api } from '../lib/api';
-import { formatDateTime, formatPlate, formatPrice, whatsappLink } from '../lib/format';
+import { formatDateTime, formatPlate, formatPrice, whatsappLink, adjustmentLabel } from '../lib/format';
 import {
   ACTIVE_STATUSES,
   Appointment,
@@ -159,9 +159,16 @@ function AppointmentCard({
           <span className={`inline-block rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadge[appointment.status]}`}>
             {statusLabels[appointment.status]}
           </span>
-          <p className="mt-1.5 text-lg font-extrabold text-ink">{formatPrice(appointment.totalPriceCents)}</p>
+          <p className="mt-1.5 text-lg font-extrabold text-ink">
+            {formatPrice(appointment.payment.status === 'PAID' ? appointment.payment.amountCents : appointment.totalPriceCents)}
+          </p>
           {appointment.payment.status === 'PAID' && (
-            <p className="text-xs font-semibold text-success">Pago · {paymentMethodLabels[appointment.payment.method]}</p>
+            <>
+              <p className="text-xs font-semibold text-success">Pago · {paymentMethodLabels[appointment.payment.method]}</p>
+              {appointment.payment.adjustmentCents !== 0 && (
+                <p className="text-xs text-ink-muted">{adjustmentLabel(appointment.payment.adjustmentCents)}</p>
+              )}
+            </>
           )}
         </div>
       </div>

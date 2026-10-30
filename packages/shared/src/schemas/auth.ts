@@ -54,6 +54,8 @@ export const LoginSchema = z.object({
   password: z
     .string()
     .min(1, 'A senha é obrigatória'),
+  // "Manter conectado neste aparelho": o cookie sobrevive ao fechar o navegador
+  remember: z.boolean().optional(),
 });
 
 export type LoginInput = z.infer<typeof LoginSchema>;

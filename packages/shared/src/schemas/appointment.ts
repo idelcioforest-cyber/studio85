@@ -152,6 +152,14 @@ export const PayAppointmentSchema = z.object({
   method: z.enum(['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH'], {
     errorMap: () => ({ message: 'Escolha a forma de pagamento' }),
   }),
+  // Valor final cobrado no caixa (desconto ou acréscimo na hora). Sem ele, vale o total do agendamento.
+  amountCents: z
+    .number({ invalid_type_error: 'Informe o valor cobrado' })
+    .int('Valor inválido')
+    .min(0, 'O valor não pode ser negativo')
+    .max(10_000_000, 'Valor muito alto')
+    .optional(),
+  adjustmentReason: z.string().trim().max(120, 'Motivo com no máximo 120 caracteres').optional(),
 });
 
 export type PayAppointmentInput = z.infer<typeof PayAppointmentSchema>;

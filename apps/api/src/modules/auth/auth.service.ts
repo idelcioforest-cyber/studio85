@@ -28,6 +28,11 @@ import {
   timingSafeCompare,
 } from '../../common/utils/crypto.util';
 
+const STAFF_ROLES = ['ADMIN', 'MANAGER', 'ATTENDANT', 'WASHER'];
+const STAFF_SESSION_SECONDS = 16 * 60 * 60;
+const CLIENT_SESSION_SECONDS = 24 * 60 * 60;
+const CLIENT_REMEMBER_SECONDS = 30 * 24 * 60 * 60;
+
 const RESET_CODE_TTL_MINUTES = 15;
 const MAX_RESET_ATTEMPTS = 5;
 
@@ -413,11 +418,17 @@ export class AuthService {
       roles,
     };
 
-    const accessToken = this.jwtService.sign(payload);
+    // Equipe: um turno inteiro (16h). Cliente: 30 dias se pediu para manter conectado, senão 1 dia.
+    const isStaff = roles.some((role) => STAFF_ROLES.includes(role));
+    const remember = input.remember !== false;
+    const sessionSeconds = isStaff ? STAFF_SESSION_SECONDS : remember ? CLIENT_REMEMBER_SECONDS : CLIENT_SESSION_SECONDS;
+    const accessToken = this.jwtService.sign(payload, { expiresIn: sessionSeconds });
 
     return {
       success: true,
       accessToken,
+      // Sem "manter conectado", o cookie some ao fechar o navegador (o token continua com prazo)
+      cookieMaxAgeMs: remember ? sessionSeconds * 1000 : undefined,
       user: {
         id: user.id,
         name: user.name,

@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, FileText, Paperclip } from 'lucide-react';
 import { PaymentModal, validateReceipt } from '../components/PaymentModal';
 import { api, uploadFile, RECEIPT_ACCEPT } from '../lib/api';
-import { formatDateLong, formatDateTime, formatPlate, formatPrice, todayISO } from '../lib/format';
+import { adjustmentLabel, formatDateLong, formatDateTime, formatPlate, formatPrice, todayISO } from '../lib/format';
 import { Appointment, PaymentMethod, paymentMethodLabels, statusBadge, statusLabels } from '../lib/types';
 
 interface CashSummary {
   date: string;
-  totals: { receivedCents: number; pendingCents: number; byMethod: Record<PaymentMethod, number> };
+  totals: { receivedCents: number; pendingCents: number; discountCents: number; byMethod: Record<PaymentMethod, number> };
   received: Appointment[];
   pending: Appointment[];
 }
@@ -54,6 +54,7 @@ export default function AdminFinanceiroPage() {
         { label: 'Cartões', value: totals.byMethod.CREDIT_CARD + totals.byMethod.DEBIT_CARD },
         { label: 'Dinheiro', value: totals.byMethod.CASH },
         { label: 'A receber', value: totals.pendingCents },
+        { label: 'Descontos', value: totals.discountCents },
       ]
     : [];
 
@@ -77,7 +78,7 @@ export default function AdminFinanceiroPage() {
         </p>
       )}
 
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {metrics.map((m) => (
           <div key={m.label} className="card p-4">
             <dt className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{m.label}</dt>
@@ -172,6 +173,12 @@ export default function AdminFinanceiroPage() {
                       <p className="text-xs font-semibold text-success">
                         {paymentMethodLabels[a.payment.method]} · {paidAt.time}
                       </p>
+                      {a.payment.adjustmentCents !== 0 && (
+                        <p className="mt-0.5 text-xs text-ink-muted">
+                          {adjustmentLabel(a.payment.adjustmentCents)} · era {formatPrice(a.totalPriceCents)}
+                          {a.payment.adjustmentReason && <span className="block italic">“{a.payment.adjustmentReason}”</span>}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-start gap-2 border-t border-line pt-3 lg:border-0 lg:pt-0">

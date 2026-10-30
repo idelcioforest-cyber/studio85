@@ -73,7 +73,16 @@ export interface Appointment {
   cancelledAt: string | null;
   services: { name: string; priceCents: number; durationMinutes: number }[];
   payment:
-    | { status: 'PAID'; method: PaymentMethod; amountCents: number; paidAt: string; hasReceipt: boolean }
+    | {
+        status: 'PAID';
+        method: PaymentMethod;
+        amountCents: number;
+        // Diferença do total no caixa: positivo = desconto, negativo = acréscimo
+        adjustmentCents: number;
+        adjustmentReason: string | null;
+        paidAt: string;
+        hasReceipt: boolean;
+      }
     | { status: 'PENDING' };
   // NONE = cadastro rápido sem login, PENDING = senha provisória enviada, ACTIVE = usa o app
   customer: { id: string; appAccess: 'NONE' | 'PENDING' | 'ACTIVE' } | null;

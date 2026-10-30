@@ -14,6 +14,7 @@ import {
   formatPrice,
   sizeLabels,
   todayISO,
+  adjustmentLabel,
 } from '../lib/format';
 import { Appointment, AppointmentStatus, paymentMethodLabels, statusBadge, statusLabels } from '../lib/types';
 
@@ -178,7 +179,11 @@ export default function AdminPatioPage() {
                 </div>
                 <p className="text-sm text-ink">
                   <span className="font-semibold">{a.services.map((s) => s.name).join(', ')}</span>
-                  <span className="text-ink-muted"> · {formatPrice(a.totalPriceCents)}</span>
+                  <span className="text-ink-muted">
+                    {' '}
+                    · {formatPrice(a.payment.status === 'PAID' ? a.payment.amountCents : a.totalPriceCents)}
+                    {a.payment.status === 'PAID' && a.payment.adjustmentCents !== 0 && ` (${adjustmentLabel(a.payment.adjustmentCents).toLowerCase()})`}
+                  </span>
                   {a.isTelebusca && <span className="text-info"> · Telebusca</span>}
                 </p>
                 <p className="text-sm text-ink-muted">

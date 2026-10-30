@@ -42,7 +42,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAdmin: boolean;
   isLoggedIn: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (email: string, password: string, remember?: boolean) => Promise<AuthUser>;
   completeProfile: (data: CompleteProfileData) => Promise<void>;
   logout: () => Promise<void>;
   register: (data: RegisterData) => Promise<{ devVerificationCode?: string }>;
@@ -132,10 +132,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, remember = true) => {
     const data = await api<{ user: AuthUser }>('/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { email, password, remember },
     });
     queryClient.removeQueries({ queryKey: ['appointments'] });
     setUser(data.user);

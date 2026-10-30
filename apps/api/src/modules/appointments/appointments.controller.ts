@@ -174,7 +174,7 @@ export class AppointmentsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(PayAppointmentSchema)) body: PayAppointmentInput,
   ) {
-    return this.appointmentsService.adminPay(id, body.method);
+    return this.appointmentsService.adminPay(id, body);
   }
 
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
