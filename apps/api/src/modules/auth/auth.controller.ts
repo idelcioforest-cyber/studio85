@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   RegisterSchema,
@@ -22,6 +23,10 @@ import {
   VerifyEmailInput,
   ResendCodeSchema,
   ResendCodeInput,
+  ForgotPasswordSchema,
+  ForgotPasswordInput,
+  ResetPasswordSchema,
+  ResetPasswordInput,
   CompleteProfileSchema,
   CompleteProfileInput,
 } from '@autowash/shared';
@@ -67,6 +72,28 @@ export class AuthController {
     @Body(new ZodValidationPipe(ResendCodeSchema)) body: ResendCodeInput,
   ) {
     return this.authService.resendVerificationCode(body);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Envia por e-mail o código para criar uma nova senha' })
+  async forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordSchema)) body: ForgotPasswordInput,
+  ) {
+    return this.authService.forgotPassword(body);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Cria a nova senha com o código recebido por e-mail' })
+  async resetPassword(
+    @Body(new ZodValidationPipe(ResetPasswordSchema)) body: ResetPasswordInput,
+  ) {
+    return this.authService.resetPassword(body);
   }
 
   @Public()

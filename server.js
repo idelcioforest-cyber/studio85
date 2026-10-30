@@ -26,16 +26,21 @@ function loadEnvFile() {
 async function firstBootSeed() {
   const { PrismaClient } = require(require.resolve('@prisma/client', { paths: [apiDir] }));
   const prisma = new PrismaClient();
+  let hasSettings;
+  let hasAdmin;
   try {
-    if ((await prisma.businessSettings.count()) > 0) return;
+    hasSettings = (await prisma.businessSettings.count()) > 0;
+    hasAdmin = (await prisma.user.count({ where: { roles: { some: { role: { name: 'ADMIN' } } } } })) > 0;
   } finally {
     await prisma.$disconnect();
   }
+  // Instalação pronta: o seed não roda de novo (ele reescreveria horários e termos)
+  if (hasSettings && hasAdmin) return;
 
-  if ((process.env.SEED_ADMIN_PASSWORD || '').length < 12 || !process.env.SEED_ADMIN_EMAIL) {
-    throw new Error('Primeiro boot: defina SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD (12+ caracteres) para criar o admin.');
+  if ((process.env.SEED_ADMIN_PASSWORD || '').length < 8 || !process.env.SEED_ADMIN_EMAIL) {
+    throw new Error('Primeiro boot: defina SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD (8+ caracteres) para criar o admin.');
   }
-  console.log('[studio85] Banco vazio: rodando o seed inicial…');
+  console.log(hasSettings ? '[studio85] Nenhum admin no banco: rodando o seed para criá-lo…' : '[studio85] Banco vazio: rodando o seed inicial…');
   execFileSync(process.execPath, [path.join(apiDir, 'dist-seed', 'seed.js')], { cwd: apiDir, stdio: 'inherit' });
 }
 

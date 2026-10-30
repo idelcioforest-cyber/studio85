@@ -23,6 +23,8 @@ export class AuditLogInterceptor implements NestInterceptor {
     // Registra mutações (POST, PUT, PATCH, DELETE)
     const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     const isLogin = url.includes('/auth/login');
+    // Nas rotas de conta, "code" é o código enviado por e-mail (verificação ou nova senha)
+    const maskCode = url.includes('/auth/');
 
     return next.handle().pipe(
       tap(async (responseBody) => {
@@ -40,8 +42,8 @@ export class AuditLogInterceptor implements NestInterceptor {
                 resourceId: request.params?.id || null,
                 ipAddress: ip?.slice(0, 45),
                 userAgent,
-                diffBeforeJson: request.body ? JSON.stringify(this.sanitizeBody(request.body)) : null,
-                diffAfterJson: responseBody ? JSON.stringify(this.sanitizeBody(responseBody)) : null,
+                diffBeforeJson: request.body ? JSON.stringify(this.sanitizeBody(request.body, maskCode)) : null,
+                diffAfterJson: responseBody ? JSON.stringify(this.sanitizeBody(responseBody, maskCode)) : null,
               },
             });
           } catch (err) {
@@ -59,19 +61,20 @@ export class AuditLogInterceptor implements NestInterceptor {
     'token',
     'devverificationcode',
     'verificationcode',
+    'devresetcode',
   ]);
 
-  private sanitizeBody(body: any, depth = 0): any {
+  private sanitizeBody(body: any, maskCode = false, depth = 0): any {
     if (!body || typeof body !== 'object' || depth > 4) return body;
-    if (Array.isArray(body)) return body.map((item) => this.sanitizeBody(item, depth + 1));
+    if (Array.isArray(body)) return body.map((item) => this.sanitizeBody(item, maskCode, depth + 1));
 
     const sanitized: Record<string, any> = {};
     for (const [key, value] of Object.entries(body)) {
       const lower = key.toLowerCase();
       sanitized[key] =
-        lower.includes('password') || AuditLogInterceptor.MASKED_KEYS.has(lower)
+        lower.includes('password') || AuditLogInterceptor.MASKED_KEYS.has(lower) || (maskCode && lower === 'code')
           ? '[MASKED]'
-          : this.sanitizeBody(value, depth + 1);
+          : this.sanitizeBody(value, maskCode, depth + 1);
     }
     return sanitized;
   }

@@ -3,14 +3,15 @@ import { Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError, errorMessage } from '../lib/api';
 import { Modal } from './Modal';
+import { PasswordInput } from './PasswordInput';
 import { LegalDocumentBody, LegalSlug } from './LegalDocument';
 
-type Step = 'login' | 'register' | 'verify';
+type Step = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
 
 const emptyRegister = { name: '', email: '', phone: '', cpf: '', password: '', acceptTerms: false };
 
 export function AuthModal() {
-  const { authModal, closeAuthModal, login, register, verifyEmail, resendCode } = useAuth();
+  const { authModal, closeAuthModal, login, register, verifyEmail, resendCode, forgotPassword, resetPassword } = useAuth();
   const [step, setStep] = useState<Step>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | Error | null>(null);
@@ -21,6 +22,7 @@ export function AuthModal() {
   const [password, setPassword] = useState('');
   const [form, setForm] = useState(emptyRegister);
   const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [readingDoc, setReadingDoc] = useState<LegalSlug | null>(null);
 
   useEffect(() => {
@@ -109,6 +111,41 @@ export function AuthModal() {
       setNotice('Enviamos um novo código para o seu e-mail.');
     });
 
+  const goTo = (next: Step) => {
+    setStep(next);
+    setError(null);
+    setNotice(null);
+    setDevCode(null);
+    setCode('');
+  };
+
+  const sendResetCode = () =>
+    run(async () => {
+      const result = await forgotPassword(email.trim());
+      setDevCode(result.devResetCode ?? null);
+      setCode('');
+      setStep('reset');
+      setNotice(`Se houver uma conta com ${email.trim()}, enviamos um código de 6 dígitos. Ele vale por 15 minutos.`);
+    });
+
+  const handleForgot = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendResetCode();
+  };
+
+  const handleReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    run(async () => {
+      await resetPassword(email.trim(), code.trim(), newPassword);
+      // Já entra com a senha nova
+      await login(email.trim(), newPassword);
+      setCode('');
+      setNewPassword('');
+      setDevCode(null);
+      closeAuthModal();
+    });
+  };
+
   const titles: Record<Step, { title: string; description: string }> = {
     login: { title: 'Entrar', description: authModal.reason ?? 'Acesse seus agendamentos e sua garagem.' },
     register: {
@@ -116,6 +153,8 @@ export function AuthModal() {
       description: authModal.reason ?? 'Para agendar pelo app, precisamos de alguns dados.',
     },
     verify: { title: 'Confirme seu e-mail', description: 'Digite o código de 6 dígitos para ativar sua conta.' },
+    forgot: { title: 'Esqueci minha senha', description: 'Informe o e-mail da sua conta para receber um código.' },
+    reset: { title: 'Criar nova senha', description: 'Digite o código enviado ao seu e-mail e escolha a nova senha.' },
   };
 
   if (readingDoc) {
@@ -151,7 +190,7 @@ export function AuthModal() {
       title={titles[step].title}
       description={titles[step].description}
     >
-      {step !== 'verify' && (
+      {(step === 'login' || step === 'register') && (
         <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-subtle p-1" role="tablist" aria-label="Acesso">
           {(['login', 'register'] as const).map((s) => (
             <button
@@ -202,15 +241,18 @@ export function AuthModal() {
           </div>
           <div>
             <label htmlFor="login-password" className="label">Senha</label>
-            <input
+            <PasswordInput
               id="login-password"
-              type="password"
               autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="field"
             />
+            <div className="mt-1.5 text-right">
+              <button type="button" onClick={() => goTo('forgot')} className="text-sm font-semibold text-accent-text underline">
+                Esqueci minha senha
+              </button>
+            </div>
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? 'Entrando…' : 'Entrar'}
@@ -279,14 +321,12 @@ export function AuthModal() {
             hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo."
             error={fieldError('password')}
           >
-            <input
+            <PasswordInput
               id="reg-password"
-              type="password"
               autoComplete="new-password"
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="field"
             />
           </Field>
           <div className="rounded-xl border border-line p-3">
@@ -351,6 +391,74 @@ export function AuthModal() {
           <button type="button" onClick={handleResend} disabled={loading} className="btn-secondary w-full">
             Reenviar código
           </button>
+        </form>
+      )}
+
+      {step === 'forgot' && (
+        <form onSubmit={handleForgot} className="space-y-4">
+          <Field id="forgot-email" label="E-mail" error={fieldError('email')}>
+            <input
+              id="forgot-email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <button type="submit" disabled={loading} className="btn-primary w-full">
+            {loading ? 'Enviando…' : 'Enviar código'}
+          </button>
+          <button type="button" onClick={() => goTo('login')} className="btn-secondary w-full">
+            Voltar para entrar
+          </button>
+        </form>
+      )}
+
+      {step === 'reset' && (
+        <form onSubmit={handleReset} className="space-y-4" noValidate>
+          {devCode && (
+            <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+              <Info className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+              <span>
+                Ambiente local: o envio de e-mail está desativado. Seu código é <strong className="font-mono">{devCode}</strong>.
+              </span>
+            </p>
+          )}
+          <Field id="reset-code" label="Código recebido por e-mail" error={fieldError('code')}>
+            <input
+              id="reset-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/D/g, ''))}
+              className="field text-center font-mono text-lg tracking-[0.4em]"
+            />
+          </Field>
+          <Field
+            id="reset-password"
+            label="Nova senha"
+            hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo."
+            error={fieldError('newPassword')}
+          >
+            <PasswordInput
+              id="reset-password"
+              autoComplete="new-password"
+              required
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </Field>
+          <button type="submit" disabled={loading || code.length !== 6 || !newPassword} className="btn-primary w-full">
+            {loading ? 'Salvando…' : 'Salvar nova senha e entrar'}
+          </button>
+          <button type="button" onClick={sendResetCode} disabled={loading} className="btn-secondary w-full">
+            Reenviar código
+          </button>
+          <p className="text-center text-xs text-ink-muted">Para evitar abusos, enviamos no máximo um código por minuto.</p>
         </form>
       )}
     </Modal>

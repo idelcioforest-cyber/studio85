@@ -14,6 +14,8 @@ import {
   LoginInput,
   VerifyEmailInput,
   ResendCodeInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
   CompleteProfileInput,
   UserRole,
 } from '@autowash/shared';
@@ -25,6 +27,14 @@ import {
   generateSecureCode,
   timingSafeCompare,
 } from '../../common/utils/crypto.util';
+
+const RESET_CODE_TTL_MINUTES = 15;
+const MAX_RESET_ATTEMPTS = 5;
+
+// HMAC com o segredo do servidor: um vazamento do banco não revela o código (só 1 milhão de combinações)
+function resetCodeHash(userId: string, code: string): string {
+  return generateLookupHash(`password-reset:${userId}:${code}`);
+}
 
 @Injectable()
 export class AuthService {
@@ -259,6 +269,108 @@ export class AuthService {
         ? { devVerificationCode: newCode }
         : {}),
     };
+  }
+
+  /**
+   * "Esqueci minha senha": envia um código de 6 dígitos por e-mail.
+   * A resposta é sempre a mesma, exista ou não a conta (evita descobrir e-mails cadastrados).
+   */
+  async forgotPassword(input: ForgotPasswordInput) {
+    const genericResponse = {
+      success: true,
+      message: 'Se houver uma conta com este e-mail, enviamos um código para criar uma nova senha.',
+    };
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: input.email },
+      select: { id: true, name: true, email: true, status: true, passwordResetExpiresAt: true },
+    });
+    if (!user || !user.email || user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+      return genericResponse;
+    }
+
+    // Um código por minuto: pedidos repetidos dentro do intervalo não disparam outro e-mail
+    const sentAt = user.passwordResetExpiresAt
+      ? user.passwordResetExpiresAt.getTime() - RESET_CODE_TTL_MINUTES * 60_000
+      : 0;
+    if (Date.now() - sentAt < 60_000) return genericResponse;
+
+    const code = generateSecureCode();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: resetCodeHash(user.id, code),
+        passwordResetExpiresAt: new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60_000),
+        passwordResetAttempts: 0,
+      },
+    });
+
+    try {
+      await this.mail.sendPasswordResetCode(user.email, user.name, code);
+    } catch (error) {
+      this.logger.error(`Falha ao enviar o código de nova senha para ${user.email}: ${(error as Error).message}`);
+      throw new ServiceUnavailableException('Não foi possível enviar o e-mail agora. Tente novamente em 1 minuto.');
+    }
+
+    return {
+      ...genericResponse,
+      ...(process.env.NODE_ENV === 'development' && process.env.MAIL_DRIVER === 'mock' ? { devResetCode: code } : {}),
+    };
+  }
+
+  /**
+   * Cria a nova senha com o código recebido por e-mail. Receber o código também comprova o e-mail,
+   * então uma conta que ainda aguardava verificação fica ativa.
+   */
+  async resetPassword(input: ResetPasswordInput) {
+    const invalid = 'Código inválido ou expirado. Peça um novo código.';
+    const user = await this.prisma.user.findUnique({
+      where: { email: input.email },
+      select: {
+        id: true,
+        status: true,
+        emailVerifiedAt: true,
+        passwordResetToken: true,
+        passwordResetExpiresAt: true,
+        passwordResetAttempts: true,
+      },
+    });
+    if (!user || !user.passwordResetToken || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+      throw new BadRequestException(invalid);
+    }
+    if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+      throw new BadRequestException(invalid);
+    }
+
+    if (!timingSafeCompare(user.passwordResetToken, resetCodeHash(user.id, input.code))) {
+      const attempts = user.passwordResetAttempts + 1;
+      const exhausted = attempts >= MAX_RESET_ATTEMPTS;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: exhausted
+          ? { passwordResetToken: null, passwordResetExpiresAt: null, passwordResetAttempts: 0 }
+          : { passwordResetAttempts: attempts },
+      });
+      throw new BadRequestException(
+        exhausted ? 'Muitas tentativas com código errado. Peça um novo código.' : 'Código incorreto.',
+      );
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword(input.newPassword),
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+        passwordResetAttempts: 0,
+        mustChangePassword: false,
+        ...(user.status === 'PENDING_VERIFICATION'
+          ? { status: 'ACTIVE' as const, emailVerifiedAt: user.emailVerifiedAt ?? new Date(), emailVerificationCode: null }
+          : {}),
+      },
+    });
+
+    return { success: true, message: 'Senha alterada. Você já pode entrar com a nova senha.' };
   }
 
   /**

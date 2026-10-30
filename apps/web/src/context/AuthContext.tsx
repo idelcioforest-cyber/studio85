@@ -48,6 +48,8 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<{ devVerificationCode?: string }>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendCode: (email: string) => Promise<{ devVerificationCode?: string }>;
+  forgotPassword: (email: string) => Promise<{ devResetCode?: string }>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   authModal: AuthModalState;
   openAuthModal: (mode?: AuthModalMode, reason?: string) => void;
   closeAuthModal: () => void;
@@ -165,6 +167,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resendCode = (email: string) =>
     api<{ devVerificationCode?: string }>('/auth/resend-code', { method: 'POST', body: { email } });
 
+  const forgotPassword = (email: string) =>
+    api<{ devResetCode?: string }>('/auth/forgot-password', { method: 'POST', body: { email } });
+
+  const resetPassword = async (email: string, code: string, newPassword: string) => {
+    await api('/auth/reset-password', { method: 'POST', body: { email, code, newPassword } });
+  };
+
   const openAuthModal = (mode: AuthModalMode = 'login', reason?: string) =>
     setAuthModal({ open: true, mode, reason });
   const closeAuthModal = () => setAuthModal((prev) => ({ ...prev, open: false }));
@@ -184,6 +193,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         verifyEmail,
         resendCode,
+        forgotPassword,
+        resetPassword,
         authModal,
         openAuthModal,
         closeAuthModal,

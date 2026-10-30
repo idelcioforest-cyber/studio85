@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { Modal } from './Modal';
+import { PasswordInput } from './PasswordInput';
 
 /**
  * Primeiro acesso de cliente cadastrado pela equipe: troca a senha provisória e completa os dados.
@@ -79,10 +80,10 @@ export function CompleteProfileModal() {
           </Field>
         </div>
         <Field id="cp-password" label="Nova senha" error={fieldError('newPassword')} hint="Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo.">
-          <input id="cp-password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="field" />
+          <PasswordInput id="cp-password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
         <Field id="cp-confirm" label="Confirme a nova senha">
-          <input id="cp-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} className="field" />
+          <PasswordInput id="cp-confirm" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </Field>
         <div>
           <label className="flex items-start gap-2.5 text-sm text-ink">

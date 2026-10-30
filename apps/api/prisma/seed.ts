@@ -386,22 +386,30 @@ Quando houver pagamento online:
   const usersToSeed: { name: string; email: string; password: string; role: string; phone: string; cpf: string }[] = [];
 
   if (isProduction) {
-    const email = process.env.SEED_ADMIN_EMAIL;
-    const password = process.env.SEED_ADMIN_PASSWORD || '';
-    if (email && password.length >= 12) {
+    const email = process.env.SEED_ADMIN_EMAIL || 'contato@studio85poa.com.br';
+    const password = process.env.SEED_ADMIN_PASSWORD || '12345678';
+    if (email && password.length >= 8) {
       usersToSeed.push({
-        name: process.env.SEED_ADMIN_NAME || 'Administrador',
+        name: process.env.SEED_ADMIN_NAME || 'Studio 85 Admin',
         email,
         password,
         role: 'ADMIN',
-        phone: process.env.SEED_ADMIN_PHONE || '',
+        phone: process.env.SEED_ADMIN_PHONE || '5192198686',
         cpf: process.env.SEED_ADMIN_CPF || '',
       });
     } else {
-      console.log('! Produção: defina SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD (12+ caracteres) para criar o admin.');
+      console.log('! Produção: defina SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD (8+ caracteres) para criar o admin.');
     }
   } else {
     usersToSeed.push(
+      {
+        name: 'Studio 85 Admin',
+        email: 'contato@studio85poa.com.br',
+        password: '12345678',
+        role: 'ADMIN',
+        phone: '5192198686',
+        cpf: '',
+      },
       {
         name: 'Idelcio Forest (Admin)',
         email: 'idelcioforest@gmail.com',

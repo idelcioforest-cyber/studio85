@@ -41,8 +41,10 @@ model User {
   emailVerifiedAt         DateTime?         @map("email_verified_at")
   emailVerificationCode   String?           @map("email_verification_code") @db.VarChar(6)
   emailVerificationSentAt DateTime?         @map("email_verification_sent_at")
+  // "Esqueci minha senha": guarda só o hash do código de 6 dígitos, nunca o código
   passwordResetToken      String?           @map("password_reset_token") @db.VarChar(128)
   passwordResetExpiresAt  DateTime?         @map("password_reset_expires_at")
+  passwordResetAttempts   Int               @default(0) @map("password_reset_attempts")
   createdAt               DateTime          @default(now()) @map("created_at")
   updatedAt               DateTime          @updatedAt @map("updated_at")
 

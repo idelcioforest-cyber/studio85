@@ -38,9 +38,30 @@ export class MailService {
   }
 
   /** Lança erro se o envio falhar; quem chama decide como avisar o usuário. */
-  async sendVerificationCode(to: string, name: string, code: string): Promise<void> {
+  sendVerificationCode(to: string, name: string, code: string): Promise<void> {
+    return this.sendCode(to, name, code, {
+      kind: 'verificação',
+      purpose: 'código de verificação',
+      ignoreNote: 'Se você não pediu este cadastro, ignore este e-mail.',
+    });
+  }
+
+  sendPasswordResetCode(to: string, name: string, code: string): Promise<void> {
+    return this.sendCode(to, name, code, {
+      kind: 'redefinição de senha',
+      purpose: 'código para criar uma nova senha',
+      ignoreNote: 'Se você não pediu para trocar a senha, ignore este e-mail: sua senha atual continua valendo.',
+    });
+  }
+
+  private async sendCode(
+    to: string,
+    name: string,
+    code: string,
+    copy: { kind: string; purpose: string; ignoreNote: string },
+  ): Promise<void> {
     if (this.driver === 'mock') {
-      this.logger.log(`[E-MAIL SIMULADO] Código de verificação para ${to}: ${code}`);
+      this.logger.log(`[E-MAIL SIMULADO] Código de ${copy.kind} para ${to}: ${code}`);
       return;
     }
 
@@ -52,22 +73,22 @@ export class MailService {
     await this.getTransporter().sendMail({
       from: { name: fromName, address: fromAddress! },
       to,
-      subject: `${code} é o seu código de verificação — ${company}`,
+      subject: `${code} é o seu ${copy.purpose} — ${company}`,
       text: [
         `Olá, ${firstName}!`,
         '',
-        `Seu código de verificação do ${company} é: ${code}`,
+        `Seu ${copy.purpose} do ${company} é: ${code}`,
         '',
-        'Ele vale por 15 minutos. Se você não pediu este cadastro, ignore este e-mail.',
+        `Ele vale por 15 minutos. ${copy.ignoreNote}`,
       ].join('\n'),
       html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#18181b">
   <p>Olá, ${escapeHtml(firstName)}!</p>
-  <p>Seu código de verificação do ${escapeHtml(company)} é:</p>
+  <p>Seu ${escapeHtml(copy.purpose)} do ${escapeHtml(company)} é:</p>
   <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
-  <p>Ele vale por 15 minutos. Se você não pediu este cadastro, ignore este e-mail.</p>
+  <p>Ele vale por 15 minutos. ${escapeHtml(copy.ignoreNote)}</p>
 </div>`,
     });
-    this.logger.log(`E-mail de verificação enviado para ${to}`);
+    this.logger.log(`E-mail de ${copy.kind} enviado para ${to}`);
   }
 }
 

@@ -103,12 +103,11 @@ export const ForgotPasswordSchema = z.object({
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
 
 /**
- * Schema de redefinição de senha com token
+ * Schema de redefinição de senha com o código de 6 dígitos enviado por e-mail
  */
 export const ResetPasswordSchema = z.object({
-  token: z
-    .string()
-    .min(10, 'Token de recuperação inválido'),
+  email: ForgotPasswordSchema.shape.email,
+  code: VerifyEmailSchema.shape.code,
   newPassword: z
     .string()
     .min(8, 'A senha deve conter no mínimo 8 caracteres')

@@ -229,12 +229,12 @@ O `server.js`:
 
 1. Carrega as variáveis de `ENV_FILE` ou do arquivo `../studio85.env` (ao lado da pasta do app, por exemplo ao lado de `public_html`). Por ficar fora da pasta do app, o arquivo sobrevive a cada novo deploy. Variáveis definidas no painel têm prioridade sobre ele.
 2. Aplica as migrações pendentes (`prisma migrate deploy`).
-3. No primeiro boot, com o banco vazio, roda o seed: serviços, horários, termos, mensagens e o admin de `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, que precisa ter 12 ou mais caracteres. Nos boots seguintes, o seed não roda.
+3. No primeiro boot, com o banco vazio, roda o seed: serviços, horários, termos, mensagens e o admin de `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, que precisa ter 8 ou mais caracteres. Enquanto não existir um admin, o seed roda de novo a cada boot; depois disso, não roda mais.
 4. Guarda fotos e comprovantes em `../studio85-storage`, também fora da pasta do app, a menos que `STORAGE_LOCAL_PATH` seja definida.
 
 O modelo do arquivo de variáveis é o `apps/api/.env.production`, que fica fora do git. Antes do primeiro boot, preencha:
 
-- `SEED_ADMIN_PASSWORD`;
+- `SEED_ADMIN_PASSWORD` (8+ caracteres);
 - `SMTP_PASSWORD`, da caixa `nao-responda@` criada em **E-mails** no hPanel. Sem e-mail, o cliente não recebe o código de cadastro.
 
 A ponte do WhatsApp (`services/whatsapp-bridge`) precisa ficar ligada o tempo todo, então deve rodar numa VPS com PM2. Depois disso, ajuste `WHATSAPP_BRIDGE_URL` e `WHATSAPP_ENABLED=true`.
