@@ -70,7 +70,7 @@ export function CompleteProfileModal() {
           </p>
         )}
         <Field id="cp-name" label="Nome completo" error={fieldError('name')}>
-          <input id="cp-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} className="field" />
+          <input id="cp-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} className="field field-caps" />
         </Field>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <Field id="cp-phone" label="Celular (WhatsApp)" error={fieldError('phone')}>

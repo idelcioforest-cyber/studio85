@@ -35,6 +35,13 @@ export const pagarmeConfig = {
     const value = Number(process.env.PAGARME_MAX_INSTALLMENTS ?? 1);
     return Number.isInteger(value) && value >= 1 && value <= 12 ? value : 1;
   },
+  /**
+   * Temporário: enquanto o lava-jato não tem recebedor liberado, o pagamento online cai inteiro
+   * na conta da plataforma, sem divisão. Com o recebedor liberado, a divisão volta sozinha.
+   */
+  get fallbackToPlatform(): boolean {
+    return process.env.PAGARME_FALLBACK_TO_PLATFORM === 'true';
+  },
   /** Basta a chave secreta para cadastrar e consultar o recebedor do lava-jato */
   get apiReady(): boolean {
     return Boolean(this.secretKey);

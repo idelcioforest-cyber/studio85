@@ -160,21 +160,21 @@ export default function AddressesPage() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <TextField id="addr-street" label="Rua" value={form.street} onChange={update('street')} required />
+              <TextField id="addr-street" label="Rua" caps value={form.street} onChange={update('street')} required />
             </div>
             <TextField id="addr-number" label="Número" value={form.number} onChange={update('number')} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <TextField id="addr-complement" label="Complemento" value={form.complement} onChange={update('complement')} />
-            <TextField id="addr-neighborhood" label="Bairro" value={form.neighborhood} onChange={update('neighborhood')} required />
+            <TextField id="addr-complement" label="Complemento" caps value={form.complement} onChange={update('complement')} />
+            <TextField id="addr-neighborhood" label="Bairro" caps value={form.neighborhood} onChange={update('neighborhood')} required />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <TextField id="addr-city" label="Cidade" value={form.city} onChange={update('city')} required />
+              <TextField id="addr-city" label="Cidade" caps value={form.city} onChange={update('city')} required />
             </div>
             <TextField id="addr-state" label="UF" value={form.state} onChange={update('state')} maxLength={2} required />
           </div>
-          <TextField id="addr-ref" label="Ponto de referência" value={form.referencePoint} onChange={update('referencePoint')} />
+          <TextField id="addr-ref" label="Ponto de referência" caps value={form.referencePoint} onChange={update('referencePoint')} />
           <label className="flex items-center gap-2 text-sm text-ink">
             <input type="checkbox" checked={form.isDefault} onChange={update('isDefault')} className="h-4 w-4 accent-amber-500" />
             Usar como endereço principal
@@ -196,12 +196,13 @@ export default function AddressesPage() {
 function TextField({
   id,
   label,
+  caps,
   ...props
-}: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+}: { id: string; label: string; caps?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div>
       <label htmlFor={id} className="label">{label}</label>
-      <input id={id} className="field" {...props} />
+      <input id={id} className={caps ? 'field field-caps' : 'field'} {...props} />
     </div>
   );
 }

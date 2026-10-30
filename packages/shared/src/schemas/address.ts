@@ -11,7 +11,8 @@ export const CreateAddressSchema = z.object({
     .string()
     .trim()
     .min(3, 'O logradouro/rua deve conter no mínimo 3 caracteres')
-    .max(150, 'Logradouro muito longo'),
+    .max(150, 'Logradouro muito longo')
+    .toUpperCase(),
   number: z
     .string()
     .trim()
@@ -21,18 +22,21 @@ export const CreateAddressSchema = z.object({
     .string()
     .trim()
     .max(100, 'Complemento muito longo')
+    .toUpperCase()
     .optional()
     .nullable(),
   neighborhood: z
     .string()
     .trim()
     .min(2, 'Bairro é obrigatório')
-    .max(100, 'Bairro muito longo'),
+    .max(100, 'Bairro muito longo')
+    .toUpperCase(),
   city: z
     .string()
     .trim()
     .min(2, 'Cidade é obrigatória')
-    .max(100, 'Cidade muito longa'),
+    .max(100, 'Cidade muito longa')
+    .toUpperCase(),
   state: z
     .string()
     .trim()
@@ -47,6 +51,7 @@ export const CreateAddressSchema = z.object({
     .string()
     .trim()
     .max(255, 'Ponto de referência muito longo')
+    .toUpperCase()
     .optional()
     .nullable(),
   isDefault: z.boolean().default(false),

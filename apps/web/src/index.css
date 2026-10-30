@@ -99,6 +99,11 @@
     @apply w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40;
   }
 
+  /* Cadastro de cliente e veículo: o servidor grava em maiúsculas e o campo já mostra assim */
+  .field-caps {
+    @apply uppercase placeholder:normal-case;
+  }
+
   .label {
     @apply mb-1 block text-xs font-semibold text-ink;
   }

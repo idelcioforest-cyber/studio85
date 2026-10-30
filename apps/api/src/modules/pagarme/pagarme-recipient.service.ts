@@ -48,10 +48,15 @@ export class PagarmeRecipientService {
     return this.prisma.paymentRecipient.findFirst({ orderBy: { createdAt: 'asc' } });
   }
 
+  /** Recebedor do lava-jato liberado no Pagar.me, ou null */
+  async activeWasher(): Promise<PaymentRecipient | null> {
+    const recipient = await this.current();
+    return recipient?.status === 'active' && recipient.pagarmeRecipientId ? recipient : null;
+  }
+
   async isActive(): Promise<boolean> {
     if (!pagarmeConfig.configured) return false;
-    const recipient = await this.current();
-    return recipient?.status === 'active' && Boolean(recipient.pagarmeRecipientId);
+    return Boolean(await this.activeWasher()) || pagarmeConfig.fallbackToPlatform;
   }
 
   feePercentFor(recipient: PaymentRecipient | null): number {
@@ -63,6 +68,7 @@ export class PagarmeRecipientService {
     return {
       configured: pagarmeConfig.configured,
       apiReady: pagarmeConfig.apiReady,
+      fallbackToPlatform: pagarmeConfig.fallbackToPlatform,
       // O que falta para o checkout abrir (o painel mostra em linguagem simples)
       missing: [
         !pagarmeConfig.secretKey && 'PAGARME_SECRET_KEY',

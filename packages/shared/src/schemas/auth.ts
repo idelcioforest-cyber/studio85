@@ -9,7 +9,8 @@ export const RegisterSchema = z.object({
     .string()
     .trim()
     .min(3, 'O nome completo deve conter no mínimo 3 caracteres')
-    .max(120, 'O nome deve conter no máximo 120 caracteres'),
+    .max(120, 'O nome deve conter no máximo 120 caracteres')
+    .toUpperCase(),
   email: z
     .string()
     .trim()

@@ -54,7 +54,7 @@ export const WalkInAppointmentSchema = z.object({
   // Preenchidos quando a equipe escolhe um cliente já cadastrado na busca
   userId: z.string().uuid().optional().nullable(),
   vehicleId: z.string().uuid().optional().nullable(),
-  customerName: z.string().trim().min(2, 'Informe o nome do cliente').max(120),
+  customerName: z.string().trim().min(2, 'Informe o nome do cliente').max(120).toUpperCase(),
   customerPhone: z
     .string()
     .trim()
@@ -71,7 +71,7 @@ export const WalkInAppointmentSchema = z.object({
       message: 'Placa inválida. Utilize o formato Mercosul (ABC1D23) ou tradicional (ABC-1234).',
     })
     .transform((val) => (val ? cleanPlate(val) : null)),
-  vehicleLabel: z.string().trim().min(2, 'Informe o modelo do veículo').max(160),
+  vehicleLabel: z.string().trim().min(2, 'Informe o modelo do veículo').max(160).toUpperCase(),
   vehicleSize: z.nativeEnum(VehicleSizeCategory),
   notes: z.string().trim().max(500).optional().nullable(),
 });
@@ -109,10 +109,10 @@ export const AdminCreateAppointmentSchema = z
     notes: z.string().trim().max(500).optional().nullable(),
     userId: z.string().uuid().optional().nullable(),
     vehicleId: z.string().uuid().optional().nullable(),
-    customerName: z.string().trim().max(120).optional().nullable(),
+    customerName: z.string().trim().max(120).toUpperCase().optional().nullable(),
     customerPhone: OptionalPhoneSchema,
     plate: OptionalPlateSchema,
-    vehicleLabel: z.string().trim().max(80).optional().nullable(),
+    vehicleLabel: z.string().trim().max(80).toUpperCase().optional().nullable(),
     vehicleSize: z.nativeEnum(VehicleSizeCategory).optional().nullable(),
   })
   .refine((d) => d.userId || d.vehicleId || (d.customerName && d.customerName.length >= 2), {

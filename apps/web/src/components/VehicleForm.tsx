@@ -65,11 +65,11 @@ export function VehicleForm({ defaultSize = VehicleSizeCategory.MEDIUM, onSaved,
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="veh-make" className="label">Marca</label>
-          <input id="veh-make" required value={make} onChange={(e) => setMake(e.target.value)} placeholder="Honda" className="field" />
+          <input id="veh-make" required value={make} onChange={(e) => setMake(e.target.value)} placeholder="Honda" className="field field-caps" />
         </div>
         <div>
           <label htmlFor="veh-model" className="label">Modelo</label>
-          <input id="veh-model" required value={model} onChange={(e) => setModel(e.target.value)} placeholder="Civic" className="field" />
+          <input id="veh-model" required value={model} onChange={(e) => setModel(e.target.value)} placeholder="Civic" className="field field-caps" />
         </div>
       </div>
 
@@ -117,7 +117,7 @@ export function VehicleForm({ defaultSize = VehicleSizeCategory.MEDIUM, onSaved,
         </div>
         <div>
           <label htmlFor="veh-color" className="label">Cor <span className="font-normal text-ink-muted">(opcional)</span></label>
-          <input id="veh-color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Preto" className="field" />
+          <input id="veh-color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Preto" className="field field-caps" />
         </div>
       </div>
 

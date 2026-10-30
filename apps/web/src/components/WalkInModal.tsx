@@ -347,7 +347,7 @@ export function WalkInModal({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="relative">
             <label htmlFor="wi-name" className="label">Nome do cliente</label>
-            <input id="wi-name" required value={form.customerName} {...comboProps('customerName')} className="field" />
+            <input id="wi-name" required value={form.customerName} {...comboProps('customerName')} className="field field-caps" />
             {suggestionList('customerName')}
           </div>
           <div className="relative">
@@ -371,7 +371,7 @@ export function WalkInModal({
           </div>
           <div>
             <label htmlFor="wi-model" className="label">Modelo e cor</label>
-            <input id="wi-model" required value={form.vehicleLabel} onChange={set('vehicleLabel')} placeholder="Corolla prata" className="field" />
+            <input id="wi-model" required value={form.vehicleLabel} onChange={set('vehicleLabel')} placeholder="Corolla prata" className="field field-caps" />
           </div>
           <div>
             <label htmlFor="wi-size" className="label">Porte</label>

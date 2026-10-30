@@ -552,7 +552,11 @@ export default function AgendaPage() {
             <span className="text-sm font-semibold text-ink">Total</span>
             <span className="text-2xl font-extrabold text-ink">{selected.length > 0 ? formatPrice(total) : '—'}</span>
           </div>
-          <p className="text-xs text-ink-muted">Pagamento no local, na retirada do veículo.</p>
+          <p className="text-xs text-ink-muted">
+            {onlineConfig?.enabled
+              ? 'Depois de confirmar, pague online com Pix ou cartão, ou no local, na retirada do veículo.'
+              : 'Pagamento no local, na retirada do veículo.'}
+          </p>
 
           {book.error && (
             <p className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger" role="alert">

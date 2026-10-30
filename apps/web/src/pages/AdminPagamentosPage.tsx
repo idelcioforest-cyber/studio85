@@ -10,6 +10,7 @@ import { centsToInput, formatDateTime, formatPlate, formatPrice, parsePriceInput
 interface RecipientState {
   configured: boolean;
   apiReady: boolean;
+  fallbackToPlatform: boolean;
   missing: string[];
   platformFeePercent: number;
   recipient:
@@ -348,6 +349,9 @@ function RecipientBanner({ state, loading, onRefresh, refreshing }: { state?: Re
   const missing = state.missing.map((name) => MISSING_LABELS[name] ?? name).join(', ');
   if (!state.apiReady) {
     text = `Pagamento online desligado: falta configurar no servidor ${missing}.`;
+  } else if (state.fallbackToPlatform && state.configured && r?.status !== 'active') {
+    text =
+      'Modo temporário: os clientes já podem pagar pelo app, mas o valor cai inteiro na conta da plataforma. Cadastre o recebedor do lava-jato (aba Recebedor) para ativar a divisão.';
   } else if (!r?.pagarmeRecipientId) {
     text = 'Cadastre o recebedor do lava-jato (aba Recebedor) para liberar o pagamento online.';
   } else if (r.status !== 'active') {

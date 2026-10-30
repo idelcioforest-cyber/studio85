@@ -241,4 +241,24 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     const entries = await prisma.financialEntry.findMany({ where: { paymentId: pix.id } });
     expect(entries.map((e) => [e.entryType, e.amountCents])).toEqual([['SALE', 7000]]);
   });
+
+  it('8. Modo temporário: sem recebedor do lava-jato, só abre com a opção ligada e tudo fica com a plataforma', async () => {
+    await prisma.paymentRecipient.update({ where: { id: created.recipient }, data: { status: 'affiliation' } });
+    try {
+      process.env.PAGARME_FALLBACK_TO_PLATFORM = '';
+      expect((await payments.onlineConfig()).enabled).toBe(false);
+
+      process.env.PAGARME_FALLBACK_TO_PLATFORM = 'true';
+      expect((await payments.onlineConfig()).enabled).toBe(true);
+      const a = await newAppointment(`TST-PLAT-${Date.now() % 100000}`);
+      const pix = await payments.createPix(userId, a.id);
+      const body = fake.orders.at(-1)! as { payments: Record<string, unknown>[] };
+      expect(body.payments[0]).not.toHaveProperty('split');
+      const pay = await prisma.payment.findUniqueOrThrow({ where: { id: pix.id } });
+      expect(pay).toMatchObject({ platformFeePercent: 100, platformFeeCents: 7000, recipientCents: 0 });
+    } finally {
+      process.env.PAGARME_FALLBACK_TO_PLATFORM = '';
+      await prisma.paymentRecipient.update({ where: { id: created.recipient }, data: { status: 'active' } });
+    }
+  });
 });

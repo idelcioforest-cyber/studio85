@@ -73,7 +73,7 @@ export class PagarmePaymentsService {
     return this.createOnline(appointment, user, order, 'PIX', (split) => ({
       payment_method: 'pix',
       pix: { expires_in: PIX_EXPIRES_IN_SECONDS },
-      split,
+      ...(split ? { split } : {}),
     }));
   }
 
@@ -83,7 +83,7 @@ export class PagarmePaymentsService {
     return this.createOnline(appointment, user, order, 'CREDIT_CARD', (split) => ({
       payment_method: 'credit_card',
       credit_card: { installments, statement_descriptor: 'STUDIO85', card_token: input.cardToken },
-      split,
+      ...(split ? { split } : {}),
     }));
   }
 
@@ -392,11 +392,12 @@ export class PagarmePaymentsService {
     user: { name: string; email: string; cpf: string; phone: string },
     order: { id: string },
     method: 'PIX' | 'CREDIT_CARD',
-    paymentFor: (split: ReturnType<typeof buildSplit>) => Record<string, unknown>,
+    paymentFor: (split: ReturnType<typeof buildSplit> | undefined) => Record<string, unknown>,
   ) {
-    const recipient = (await this.recipients.current())!;
-    const feePercent = this.recipients.feePercentFor(recipient);
-    const split = buildSplit(recipient.pagarmeRecipientId!, pagarmeConfig.platformRecipientId, feePercent);
+    const washer = await this.recipients.activeWasher();
+    // Modo temporário sem recebedor do lava-jato: o valor todo fica na conta da plataforma, sem divisão
+    const feePercent = washer ? this.recipients.feePercentFor(washer) : 100;
+    const split = washer ? buildSplit(washer.pagarmeRecipientId!, pagarmeConfig.platformRecipientId, feePercent) : undefined;
     const amount = appointment.totalPriceCents;
     const platformCents = platformShareCents(amount, feePercent);
 

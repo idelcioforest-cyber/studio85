@@ -303,7 +303,7 @@ export function AuthModal() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="field"
+              className="field field-caps"
             />
           </Field>
           <Field id="reg-email" label="E-mail" error={fieldError('email')}>
