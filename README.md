@@ -260,7 +260,7 @@ Com `PAGARME_FALLBACK_TO_PLATFORM=true` (modo temporário), o checkout abre mesm
 
 **Pagamento no app (chave do dono):** em Configurações → Pagamento no app, o dono pode desligar o pagamento online. Desligado, o app não oferece Pix nem cartão, a API recusa novas cobranças e novas assinaturas, e tudo é pago no local. Pagamentos já feitos, reembolsos, webhooks e a cobrança de quem já assina continuam funcionando.
 
-**Taxa paga pelo cliente:** em Configurações → Pagamento online, o dono informa as taxas do contrato com o Pagar.me (Pix e cartão por número de parcelas, percentual e fixo) e até quantas vezes aceita parcelar. No pagamento online o cliente paga o serviço mais a taxa, em item separado do pedido, inclusive no cartão em 1x; descontada a taxa, chega o preço do serviço. Na Receita a taxa não conta como faturamento.
+**Taxa do cartão paga pelo cliente:** as taxas do contrato com o Pagar.me são da plataforma e ficam no servidor, em `PAGARME_FEE_CARD_PERCENTS` (% por número de parcelas, em ordem: `3.89,4.18` = 1x 3,89% e 2x 4,18%). No cartão o cliente paga o serviço mais a taxa, em item separado do pedido, inclusive em 1x; descontada a taxa, chega o preço do serviço. No Pix e no pagamento no local o cliente paga só o serviço. O dono só escolhe, em Configurações → Parcelamento no cartão, até quantas vezes aceita parcelar, limitado às parcelas com taxa definida. Na Receita a taxa não conta como faturamento.
 
 **Variáveis** (modelo em `infra/.env.example`):
 

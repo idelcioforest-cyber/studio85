@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import * as QRCode from 'qrcode';
-import { CardPaymentInput, FeeCharge, OnlineFeeRates, RefundPaymentInput, cardCharge, parseOnlineFees, pixCharge } from '@autowash/shared';
+import { CardPaymentInput, FeeCharge, OnlineFeeRates, RefundPaymentInput, cardCharge, pixCharge } from '@autowash/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptSensitiveData } from '../../common/utils/crypto.util';
 import { addDays, toZonedDateString, zonedTimeToUtc } from '../../common/utils/timezone.util';
@@ -58,10 +58,11 @@ export class PagarmePaymentsService {
     };
   }
 
-  /** Taxas do contrato com o Pagar.me informadas pelo dono (sem nada informado: sem taxa, só à vista) */
+  /** Taxas do cartão (da plataforma) com o limite de parcelas escolhido pelo dono */
   async feeRates(): Promise<OnlineFeeRates> {
-    const settings = await this.prisma.businessSettings.findFirst({ select: { onlineFeesJson: true } });
-    return parseOnlineFees(settings?.onlineFeesJson);
+    const settings = await this.prisma.businessSettings.findFirst({ select: { maxInstallments: true } });
+    const rates = pagarmeConfig.feeRates;
+    return { ...rates, maxInstallments: Math.min(settings?.maxInstallments ?? 1, rates.maxInstallments) };
   }
 
   async createPix(userId: string, appointmentId: string) {
@@ -455,8 +456,8 @@ export class PagarmePaymentsService {
       },
       items: [
         { amount: price.baseCents, description: `${services} · ${appointment.vehicleLabel}`.slice(0, 250), quantity: 1, code: appointment.readableCode },
-        // Taxa do pagamento online, paga pelo cliente
-        ...(price.feeCents > 0 ? [{ amount: price.feeCents, description: 'Taxa do pagamento online', quantity: 1, code: 'TAXA' }] : []),
+        // Taxa do cartão, paga pelo cliente
+        ...(price.feeCents > 0 ? [{ amount: price.feeCents, description: 'Taxa do cartão', quantity: 1, code: 'TAXA' }] : []),
       ],
       metadata: {
         source: pagarmeConfig.sourceTag,

@@ -11,7 +11,7 @@ export interface OnlineConfig {
   enabled: boolean;
   publicKey: string | null;
   maxInstallments: number;
-  // Taxas do Pagar.me pagas pelo cliente
+  // Taxas do cartão pagas pelo cliente (no Pix não há taxa)
   fees: Omit<OnlineFeeRates, 'maxInstallments'>;
 }
 
@@ -44,7 +44,7 @@ export function FeeBreakdown({ charge, label = 'Serviço' }: { charge: FeeCharge
         <dd className="text-ink">{formatPrice(charge.baseCents)}</dd>
       </div>
       <div className="flex justify-between gap-3">
-        <dt className="text-ink-muted">Taxa do pagamento online</dt>
+        <dt className="text-ink-muted">Taxa do cartão (por conta do cliente)</dt>
         <dd className="text-ink">{formatPrice(charge.feeCents)}</dd>
       </div>
       <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
@@ -195,7 +195,7 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
       title="Pagar agora"
       description={
         hasFee
-          ? `Serviço de ${formatPrice(appointment.totalPriceCents)}. O pagamento online tem uma taxa; na loja você paga só o serviço.`
+          ? `Serviço de ${formatPrice(appointment.totalPriceCents)}. No cartão a taxa é por sua conta; no Pix e na loja você paga só o serviço.`
           : `Total de ${formatPrice(appointment.totalPriceCents)}. Se preferir, você também pode pagar na loja.`
       }
     >

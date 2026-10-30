@@ -13,15 +13,8 @@ export const UpdateBusinessSettingsSchema = z.object({
   simultaneousSlotsDefault: z.number().int().min(1).max(20).optional(),
   onlinePaymentsEnabled: z.boolean().optional(),
   subscriptionsEnabled: z.boolean().optional(),
-  onlineFees: z
-    .object({
-      pixPercentBp: z.number().int().min(0).max(3000, 'Taxa do Pix acima de 30%'),
-      pixFixedCents: z.number().int().min(0).max(2000),
-      cardFixedCents: z.number().int().min(0).max(2000),
-      cardPercentBp: z.array(z.number().int().min(0).max(3000, 'Taxa do cartão acima de 30%')).length(12),
-      maxInstallments: z.number().int().min(1).max(12),
-    })
-    .optional(),
+  // Até quantas vezes o cliente parcela no cartão (as taxas são da plataforma, não do dono)
+  maxInstallments: z.number().int().min(1).max(12).optional(),
 });
 
 export type UpdateBusinessSettingsInput = z.infer<typeof UpdateBusinessSettingsSchema>;

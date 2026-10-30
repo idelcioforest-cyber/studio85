@@ -7,7 +7,8 @@ import { PagarmeRecipientService } from '../src/modules/pagarme/pagarme-recipien
 import { PagarmePaymentsService } from '../src/modules/pagarme/pagarme-payments.service';
 import { PagarmeWebhookService } from '../src/modules/pagarme/pagarme-webhook.service';
 import { PagarmeSubscriptionsService } from '../src/modules/pagarme/pagarme-subscriptions.service';
-import { parseOnlineFees } from '@autowash/shared';
+import { normalizeOnlineFees } from '@autowash/shared';
+import { pagarmeConfig } from '../src/modules/pagarme/pagarme.config';
 import { buildSplit } from '../src/modules/pagarme/split-builder';
 
 /** Pagar.me de mentira: guarda o que foi enviado e responde como a API v5 */
@@ -119,7 +120,7 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     payments = module.get(PagarmePaymentsService);
     webhooks = module.get(PagarmeWebhookService);
     // Taxas fixas no teste (sem taxa): não dependem do que outro teste grava nas configurações
-    feeRates = jest.spyOn(payments, 'feeRates').mockResolvedValue(parseOnlineFees(null));
+    feeRates = jest.spyOn(payments, 'feeRates').mockResolvedValue(normalizeOnlineFees());
 
     // Cliente com CPF, celular e e-mail (exigidos para pagar online)
     const user = await prisma.user.create({
@@ -280,32 +281,29 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     }
   });
 
-  it('9. Taxa repassada: Pix e cartão parcelado cobram a taxa do cliente em item separado; parcelas limitadas', async () => {
-    const rates = parseOnlineFees(
-      JSON.stringify({ pixPercentBp: 119, cardFixedCents: 50, cardPercentBp: [499, 599, 699], maxInstallments: 2 }),
-    );
+  it('9. Taxa do cartão por conta do cliente, em item separado; Pix sem taxa; parcelas limitadas', async () => {
+    const rates = normalizeOnlineFees({ cardPercentBp: [389, 418, 450], maxInstallments: 2 });
     feeRates.mockResolvedValue(rates);
     try {
       const config = await payments.onlineConfig();
-      expect(config).toMatchObject({ maxInstallments: 2, fees: { pixPercentBp: 119, cardFixedCents: 50 } });
+      expect(config).toMatchObject({ maxInstallments: 2, fees: { pixPercentBp: 0, cardPercentBp: [389, 418, 450] } });
 
       const a = await newAppointment(`TST-FEE-${Date.now() % 100000}`);
       const pix = await payments.createPix(userId, a.id);
       const pixBody = fake.orders.at(-1)! as { items: { amount: number; description: string }[] };
-      expect(pixBody.items.map((i) => i.amount)).toEqual([7000, pix.amountCents - 7000]);
-      expect(pixBody.items[1].description).toBe('Taxa do pagamento online');
-      expect(pix).toMatchObject({ customerFeeCents: pix.amountCents - 7000, installments: 1 });
-      expect(pix.amountCents).toBe(Math.ceil(7000 / (1 - 0.0119)));
+      expect(pixBody.items.map((i) => i.amount)).toEqual([7000]);
+      expect(pix).toMatchObject({ amountCents: 7000, customerFeeCents: 0, installments: 1 });
 
       // Pediu 3x, o dono aceita até 2x: cobra em 2x com a taxa de 2x
       const b = await newAppointment(`TST-FEE2-${Date.now() % 100000}`);
       fake.nextCardStatus = 'paid';
       const card = await payments.createCard(userId, b.id, { cardToken: 'token_fee', installments: 3 });
-      const cardBody = fake.orders.at(-1)! as { payments: { credit_card: { installments: number } }[] };
+      const cardBody = fake.orders.at(-1)! as { items: { amount: number; description: string }[]; payments: { credit_card: { installments: number } }[] };
       expect(cardBody.payments[0].credit_card.installments).toBe(2);
-      expect(card).toMatchObject({ status: 'PAID', installments: 2, amountCents: Math.ceil((7000 + 50) / (1 - 0.0599)) });
+      expect(cardBody.items[1].description).toBe('Taxa do cartão');
+      expect(card).toMatchObject({ status: 'PAID', installments: 2, amountCents: Math.ceil(7000 / (1 - 0.0418)) });
     } finally {
-      feeRates.mockResolvedValue(parseOnlineFees(null));
+      feeRates.mockResolvedValue(normalizeOnlineFees());
     }
   });
 
@@ -321,5 +319,19 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
       ownerEnabled.mockResolvedValue(true);
     }
     expect((await payments.onlineConfig()).enabled).toBe(true);
+  });
+
+  it('11. Taxas do cartão vêm do servidor: só as parcelas listadas; valor estranho corta a lista; Pix sempre sem taxa', () => {
+    const original = process.env.PAGARME_FEE_CARD_PERCENTS;
+    try {
+      process.env.PAGARME_FEE_CARD_PERCENTS = '3.89, 4.18';
+      expect(pagarmeConfig.feeRates).toMatchObject({ pixPercentBp: 0, pixFixedCents: 0, cardFixedCents: 0, cardPercentBp: [389, 418], maxInstallments: 2 });
+      process.env.PAGARME_FEE_CARD_PERCENTS = '3.89,abc,5';
+      expect(pagarmeConfig.feeRates).toMatchObject({ cardPercentBp: [389], maxInstallments: 1 });
+      process.env.PAGARME_FEE_CARD_PERCENTS = '';
+      expect(pagarmeConfig.feeRates).toMatchObject({ cardPercentBp: [0], maxInstallments: 1 });
+    } finally {
+      process.env.PAGARME_FEE_CARD_PERCENTS = original;
+    }
   });
 });

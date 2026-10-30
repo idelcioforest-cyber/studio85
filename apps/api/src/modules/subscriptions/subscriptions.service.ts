@@ -6,7 +6,6 @@ import {
   SubscriptionPlanInput,
   SubscriptionSetupInput,
   cardCharge,
-  parseOnlineFees,
 } from '@autowash/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptSensitiveData } from '../../common/utils/crypto.util';
@@ -121,7 +120,7 @@ export class SubscriptionsService {
     const [plan, vehicle, settings] = await Promise.all([
       this.prisma.subscriptionPlan.findUnique({ where: { id: input.planId }, include: { services: true, prices: true } }),
       this.prisma.vehicle.findFirst({ where: { id: input.vehicleId, userId: input.userId, status: 'ACTIVE' } }),
-      this.prisma.businessSettings.findFirst({ select: { onlineFeesJson: true, subscriptionsEnabled: true, onlinePaymentsEnabled: true } }),
+      this.prisma.businessSettings.findFirst({ select: { subscriptionsEnabled: true, onlinePaymentsEnabled: true } }),
     ]);
     if (!settings?.subscriptionsEnabled) throw new BadRequestException('Libere as assinaturas em Configurações antes de ativar.');
     if (!settings.onlinePaymentsEnabled) {
@@ -135,7 +134,7 @@ export class SubscriptionsService {
     if (open) throw new ConflictException('Esse veículo já tem uma assinatura. Cancele a atual antes de ativar outra.');
 
     // Mensalidade no cartão em 1x: a taxa do Pagar.me fica com o cliente
-    const charge = cardCharge(price.priceCents, 1, parseOnlineFees(settings?.onlineFeesJson));
+    const charge = cardCharge(price.priceCents, 1, pagarmeConfig.feeRates);
     const washer = await this.recipients.activeWasher();
     const token = crypto.randomBytes(24).toString('base64url');
     const sub = await this.prisma.customerSubscription.create({

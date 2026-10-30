@@ -1,6 +1,6 @@
 /**
  * Taxa do pagamento online repassada ao cliente.
- * O dono informa as taxas do contrato dele com o Pagar.me; o valor cobrado é calculado para que,
+ * As taxas do contrato com o Pagar.me são definidas pela plataforma; o valor cobrado é calculado para que,
  * descontada a taxa, sobre exatamente o preço do serviço.
  */
 export interface OnlineFeeRates {
@@ -10,19 +10,11 @@ export interface OnlineFeeRates {
   pixFixedCents: number;
   /** Cartão: valor fixo por transação, em centavos */
   cardFixedCents: number;
-  /** Cartão: percentual por número de parcelas (posição 0 = 1x ... posição 11 = 12x) */
+  /** Cartão: percentual por número de parcelas (posição 0 = 1x, 1 = 2x...); só as listadas são oferecidas */
   cardPercentBp: number[];
   /** Até quantas vezes o cliente pode parcelar */
   maxInstallments: number;
 }
-
-export const DEFAULT_ONLINE_FEES: OnlineFeeRates = {
-  pixPercentBp: 0,
-  pixFixedCents: 0,
-  cardFixedCents: 0,
-  cardPercentBp: Array.from({ length: 12 }, () => 0),
-  maxInstallments: 1,
-};
 
 export interface FeeCharge {
   /** Preço do serviço */
@@ -36,20 +28,19 @@ export interface FeeCharge {
 const clampInt = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === 'number' && Number.isInteger(value) ? Math.min(Math.max(value, min), max) : fallback;
 
-/** Lê as taxas gravadas (JSON); qualquer valor ausente ou estranho volta ao padrão (sem taxa, só à vista) */
-export function parseOnlineFees(json: string | null | undefined): OnlineFeeRates {
-  let raw: Partial<OnlineFeeRates> = {};
-  try {
-    raw = json ? (JSON.parse(json) as Partial<OnlineFeeRates>) : {};
-  } catch {
-    raw = {};
-  }
+/**
+ * Confere as taxas: valor ausente ou estranho vira "sem taxa". As parcelas oferecidas vão só até a
+ * última com taxa conhecida (sem nenhuma, só à vista).
+ */
+export function normalizeOnlineFees(raw: Partial<OnlineFeeRates> = {}): OnlineFeeRates {
+  const known = (raw.cardPercentBp ?? []).slice(0, 12).map((value) => clampInt(value, 0, 3000, 0));
+  const cardPercentBp = known.length > 0 ? known : [0];
   return {
     pixPercentBp: clampInt(raw.pixPercentBp, 0, 3000, 0),
     pixFixedCents: clampInt(raw.pixFixedCents, 0, 2000, 0),
     cardFixedCents: clampInt(raw.cardFixedCents, 0, 2000, 0),
-    cardPercentBp: Array.from({ length: 12 }, (_, i) => clampInt(raw.cardPercentBp?.[i], 0, 3000, 0)),
-    maxInstallments: clampInt(raw.maxInstallments, 1, 12, 1),
+    cardPercentBp,
+    maxInstallments: clampInt(raw.maxInstallments, 1, cardPercentBp.length, cardPercentBp.length),
   };
 }
 
@@ -65,6 +56,6 @@ export function pixCharge(baseCents: number, rates: OnlineFeeRates): FeeCharge {
 }
 
 export function cardCharge(baseCents: number, installments: number, rates: OnlineFeeRates): FeeCharge {
-  const index = Math.min(Math.max(installments, 1), 12) - 1;
+  const index = Math.min(Math.max(installments, 1), rates.cardPercentBp.length) - 1;
   return withFee(baseCents, rates.cardPercentBp[index] ?? 0, rates.cardFixedCents);
 }

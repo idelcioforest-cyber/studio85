@@ -1,3 +1,5 @@
+import { OnlineFeeRates, normalizeOnlineFees } from '@autowash/shared';
+
 /**
  * Configuração do Pagar.me lida do ambiente a cada uso. Só a chave pública (pk_) vai para o navegador.
  * A conta é compartilhada com outros sistemas: tudo que este cria leva metadata.source = PAGARME_SOURCE_TAG.
@@ -36,6 +38,17 @@ export const pagarmeConfig = {
    */
   get fallbackToPlatform(): boolean {
     return process.env.PAGARME_FALLBACK_TO_PLATFORM === 'true';
+  },
+  /**
+   * Taxas do cartão no contrato com o Pagar.me, repassadas ao cliente. São da plataforma, não do lava-jato.
+   * PAGARME_FEE_CARD_PERCENTS: percentual por número de parcelas, em ordem (1x, 2x...), ex.: "3.89,4.18".
+   * Só as parcelas listadas podem ser oferecidas. No Pix o cliente não paga taxa.
+   */
+  get feeRates(): OnlineFeeRates {
+    const percents = (process.env.PAGARME_FEE_CARD_PERCENTS || '').split(',').map((v) => v.trim()).filter(Boolean).map(Number);
+    const firstInvalid = percents.findIndex((v) => !Number.isFinite(v) || v < 0 || v > 30);
+    const known = firstInvalid === -1 ? percents : percents.slice(0, firstInvalid);
+    return normalizeOnlineFees({ cardPercentBp: known.map((v) => Math.round(v * 100)) });
   },
   /** Basta a chave secreta para cadastrar e consultar o recebedor do lava-jato */
   get apiReady(): boolean {

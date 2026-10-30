@@ -1,6 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateBusinessSettingsInput, parseOnlineFees } from '@autowash/shared';
+import { UpdateBusinessSettingsInput } from '@autowash/shared';
+import { pagarmeConfig } from '../pagarme/pagarme.config';
+
+/** Taxas do cartão (da plataforma, pagas pelo cliente) e até quantas parcelas o dono pode liberar */
+function cardInstallments(maxInstallments: number) {
+  const rates = pagarmeConfig.feeRates;
+  return {
+    installmentsAvailable: rates.maxInstallments,
+    onlineFees: { ...rates, maxInstallments: Math.min(maxInstallments, rates.maxInstallments) },
+  };
+}
 
 @Injectable()
 export class SettingsService {
@@ -50,9 +60,7 @@ export class SettingsService {
         },
       });
     }
-    // As taxas do pagamento online vão para o painel já interpretadas
-    const { onlineFeesJson, ...rest } = settings;
-    return { ...rest, onlineFees: parseOnlineFees(onlineFeesJson) };
+    return { ...settings, ...cardInstallments(settings.maxInstallments) };
   }
 
   /**
@@ -60,6 +68,9 @@ export class SettingsService {
    */
   async updateSettings(input: UpdateBusinessSettingsInput) {
     const current = await this.getAdminSettings();
+    if (input.maxInstallments !== undefined && input.maxInstallments > current.installmentsAvailable) {
+      throw new BadRequestException(`O cartão pode ser parcelado em até ${current.installmentsAvailable}x por enquanto.`);
+    }
 
     const updated = await this.prisma.businessSettings.update({
       where: { id: current.id },
@@ -76,15 +87,14 @@ export class SettingsService {
         ...(input.simultaneousSlotsDefault !== undefined ? { simultaneousSlotsDefault: input.simultaneousSlotsDefault } : {}),
         ...(input.onlinePaymentsEnabled !== undefined ? { onlinePaymentsEnabled: input.onlinePaymentsEnabled } : {}),
         ...(input.subscriptionsEnabled !== undefined ? { subscriptionsEnabled: input.subscriptionsEnabled } : {}),
-        ...(input.onlineFees !== undefined ? { onlineFeesJson: JSON.stringify(input.onlineFees) } : {}),
+        ...(input.maxInstallments !== undefined ? { maxInstallments: input.maxInstallments } : {}),
       },
     });
 
-    const { onlineFeesJson, ...rest } = updated;
     return {
       success: true,
       message: 'Configurações atualizadas com sucesso.',
-      settings: { ...rest, onlineFees: parseOnlineFees(onlineFeesJson) },
+      settings: { ...updated, ...cardInstallments(updated.maxInstallments) },
     };
   }
 }

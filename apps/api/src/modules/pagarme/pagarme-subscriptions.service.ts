@@ -82,7 +82,7 @@ export class PagarmeSubscriptionsService {
         { description, quantity: 1, pricing_scheme: { scheme_type: 'unit', price: sub.priceCents } },
         // Taxa do cartão, paga pelo cliente
         ...(sub.customerFeeCents > 0
-          ? [{ description: 'Taxa do pagamento online', quantity: 1, pricing_scheme: { scheme_type: 'unit', price: sub.customerFeeCents } }]
+          ? [{ description: 'Taxa do cartão', quantity: 1, pricing_scheme: { scheme_type: 'unit', price: sub.customerFeeCents } }]
           : []),
       ],
       ...(rules ? { split: { enabled: true, rules } } : {}),

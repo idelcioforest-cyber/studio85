@@ -203,8 +203,8 @@ model BusinessSettings {
   whatsappStatusAt         DateTime?                @map("whatsapp_status_at")
   // Pagamento no app (Pix/cartão pelo Pagar.me): o dono pode desligar e receber só no local
   onlinePaymentsEnabled    Boolean                  @default(true) @map("online_payments_enabled")
-  // Taxas do Pagar.me repassadas ao cliente e parcelas aceitas (JSON, ver OnlineFeeRates)
-  onlineFeesJson           String?                  @map("online_fees_json") @db.Text
+  // Até quantas vezes o cliente parcela no cartão (limitado às parcelas com taxa definida pela plataforma)
+  maxInstallments          Int                      @default(1) @map("max_installments")
   // Assinaturas: só aparecem no painel quando o dono libera; o site nunca divulga
   subscriptionsEnabled     Boolean                  @default(false) @map("subscriptions_enabled")
   createdAt                DateTime                 @default(now()) @map("created_at")

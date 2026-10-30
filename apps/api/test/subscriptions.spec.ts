@@ -10,7 +10,7 @@ import { SubscriptionsService } from '../src/modules/subscriptions/subscriptions
 import { AppointmentsService } from '../src/modules/appointments/appointments.service';
 import { ScheduleService } from '../src/modules/schedule/schedule.service';
 import { NotificationsService } from '../src/modules/whatsapp/notifications.service';
-import { cardCharge, parseOnlineFees, pixCharge, withFee } from '@autowash/shared';
+import { cardCharge, normalizeOnlineFees, pixCharge, withFee } from '@autowash/shared';
 
 const DAY = 86_400_000;
 
@@ -78,7 +78,7 @@ describe('Assinaturas: plano livre, cartão recorrente, cobertura das lavagens e
   const fake = new FakePagarme();
   const env = { ...process.env };
   const ids = { user: '', vehicle: '', otherVehicle: '', category: '', wash: '', wax: '', extra: '', recipient: '', plan: '', settings: '' };
-  let originalSettings: { subscriptionsEnabled: boolean; onlineFeesJson: string | null } | null = null;
+  let originalSettings: { subscriptionsEnabled: boolean } | null = null;
   const tag = Date.now() % 1_000_000;
 
   beforeAll(async () => {
@@ -111,18 +111,13 @@ describe('Assinaturas: plano livre, cartão recorrente, cobertura das lavagens e
     webhooks = module.get(PagarmeWebhookService);
     appointments = module.get(AppointmentsService);
 
-    // Configurações: assinaturas liberadas e taxa do cartão 1x de 4,99% + R$ 0,50 (restauradas no fim)
+    // Assinaturas liberadas (restaurado no fim) e taxa do cartão 1x de 4,99%, definida no servidor
     let settings = await prisma.businessSettings.findFirst();
     if (!settings) settings = await prisma.businessSettings.create({ data: {} });
     ids.settings = settings.id;
-    originalSettings = { subscriptionsEnabled: settings.subscriptionsEnabled, onlineFeesJson: settings.onlineFeesJson };
-    await prisma.businessSettings.update({
-      where: { id: settings.id },
-      data: {
-        subscriptionsEnabled: true,
-        onlineFeesJson: JSON.stringify({ pixPercentBp: 119, pixFixedCents: 0, cardFixedCents: 50, cardPercentBp: [499, 599, 599, 699, 699, 699, 799, 799, 799, 799, 799, 799], maxInstallments: 3 }),
-      },
-    });
+    originalSettings = { subscriptionsEnabled: settings.subscriptionsEnabled };
+    await prisma.businessSettings.update({ where: { id: settings.id }, data: { subscriptionsEnabled: true } });
+    process.env.PAGARME_FEE_CARD_PERCENTS = '4.99,5.99,5.99';
 
     const category = await prisma.serviceCategory.create({ data: { name: `Teste assinatura ${tag}` } });
     ids.category = category.id;
@@ -195,7 +190,7 @@ describe('Assinaturas: plano livre, cartão recorrente, cobertura das lavagens e
   });
 
   it('1. Taxa repassada: o total cobre a taxa e sobra exatamente o preço do serviço', () => {
-    const rates = parseOnlineFees(JSON.stringify({ pixPercentBp: 119, cardFixedCents: 50, cardPercentBp: [499, 599], maxInstallments: 2 }));
+    const rates = normalizeOnlineFees({ pixPercentBp: 119, cardFixedCents: 50, cardPercentBp: [499, 599], maxInstallments: 2 });
     const pix = pixCharge(6000, rates);
     expect(pix.totalCents - Math.round((pix.totalCents * 119) / 10_000)).toBeGreaterThanOrEqual(6000);
     expect(pix.totalCents - Math.round((pix.totalCents * 119) / 10_000)).toBeLessThanOrEqual(6001);
@@ -203,7 +198,13 @@ describe('Assinaturas: plano livre, cartão recorrente, cobertura das lavagens e
     expect(card).toEqual({ baseCents: 6000, feeCents: card.totalCents - 6000, totalCents: Math.ceil(6050 / 0.9501) });
     expect(cardCharge(6000, 2, rates).totalCents).toBeGreaterThan(card.totalCents);
     expect(withFee(6000, 0, 0)).toEqual({ baseCents: 6000, feeCents: 0, totalCents: 6000 });
-    expect(parseOnlineFees('lixo')).toMatchObject({ maxInstallments: 1, pixPercentBp: 0 });
+    expect(normalizeOnlineFees({ pixPercentBp: -1, cardPercentBp: [], maxInstallments: 9 })).toEqual({
+      pixPercentBp: 0,
+      pixFixedCents: 0,
+      cardFixedCents: 0,
+      cardPercentBp: [0],
+      maxInstallments: 1,
+    });
   });
 
   it('2. Plano: nada pronto, até 4 serviços, preço por porte; serviço repetido é recusado', async () => {
@@ -224,7 +225,7 @@ describe('Assinaturas: plano livre, cartão recorrente, cobertura das lavagens e
     await expect(subscriptions.activate({ planId: ids.plan, userId: ids.user, vehicleId: ids.otherVehicle })).rejects.toThrow(/porte/);
 
     const { subscription, setupUrl } = await subscriptions.activate({ planId: ids.plan, userId: ids.user, vehicleId: ids.vehicle });
-    const expected = cardCharge(9900, 1, parseOnlineFees(JSON.stringify({ cardFixedCents: 50, cardPercentBp: [499] })));
+    const expected = cardCharge(9900, 1, normalizeOnlineFees({ cardPercentBp: [499] }));
     expect(subscription).toMatchObject({ status: 'PENDING_CARD', priceCents: 9900, chargedCents: expected.totalCents, linkActive: true });
     expect(setupUrl).toMatch(/\/assinatura\/[A-Za-z0-9_-]{20,}$/);
 
