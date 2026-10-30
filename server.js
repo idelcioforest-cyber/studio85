@@ -2,19 +2,24 @@
  * Ponto de entrada em produção (app Node da Hostinger ou qualquer servidor): `npm start`.
  *
  * 1. Carrega as variáveis de um arquivo FORA da pasta do app, para sobreviver a cada novo deploy:
- *    ENV_FILE, ou ../studio85.env (ao lado de public_html).
+ *    ENV_FILE, ../studio85.env ou ~/studio85.env. Na Hostinger, as variáveis do painel já chegam prontas.
  * 2. Aplica as migrações pendentes do banco (prisma migrate deploy).
  * 3. No primeiro boot (banco sem configurações), roda o seed com serviços, horários, termos e o admin.
  * 4. Sobe a API, que também serve o site já compilado (apps/web/dist).
  */
 const { execFileSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const apiDir = path.join(__dirname, 'apps', 'api');
 
 function loadEnvFile() {
-  const candidates = [process.env.ENV_FILE, path.join(__dirname, '..', 'studio85.env')].filter(Boolean);
+  const candidates = [
+    process.env.ENV_FILE,
+    path.join(__dirname, '..', 'studio85.env'),
+    path.join(os.homedir(), 'studio85.env'),
+  ].filter(Boolean);
   const file = candidates.find((candidate) => existsSync(candidate));
   if (!file) return;
   // Variáveis já definidas no painel têm prioridade sobre o arquivo
@@ -47,8 +52,13 @@ async function firstBootSeed() {
 async function main() {
   loadEnvFile();
   process.env.NODE_ENV = process.env.NODE_ENV || 'production';
-  // Fotos e comprovantes ficam fora da pasta do app, senão um novo deploy apagaria tudo
-  process.env.STORAGE_LOCAL_PATH = process.env.STORAGE_LOCAL_PATH || path.join(__dirname, '..', 'studio85-storage');
+  // Fotos e comprovantes ficam fora da pasta do app, senão um novo deploy apagaria tudo.
+  // Na Hostinger o app roda em hbuilds/versions/<id>/nodejs (apagada a cada deploy): por isso o padrão é a home.
+  const storage = process.env.STORAGE_LOCAL_PATH || path.join(os.homedir(), 'studio85-storage');
+  if (!path.isAbsolute(storage)) {
+    console.warn(`[studio85] STORAGE_LOCAL_PATH relativo (${storage}) pode ficar dentro da pasta do deploy; use um caminho absoluto.`);
+  }
+  process.env.STORAGE_LOCAL_PATH = storage;
 
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL não definida.');
 

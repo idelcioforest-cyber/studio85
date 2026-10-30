@@ -231,10 +231,10 @@ A API (NestJS) também serve o site compilado (`apps/web/dist`), então a produ�
 
 O `server.js`:
 
-1. Carrega as variáveis de `ENV_FILE` ou do arquivo `../studio85.env` (ao lado da pasta do app, por exemplo ao lado de `public_html`). Por ficar fora da pasta do app, o arquivo sobrevive a cada novo deploy. Variáveis definidas no painel têm prioridade sobre ele.
+1. Carrega as variáveis de `ENV_FILE`, `../studio85.env` ou `~/studio85.env`, que ficam fora da pasta do app e sobrevivem a cada novo deploy. Variáveis definidas no painel têm prioridade. Na Hostinger elas ficam em `hbuilds/config/.env` e só entram em vigor no próximo build (um push no `main` dispara o build); reiniciar não basta.
 2. Aplica as migrações pendentes (`prisma migrate deploy`).
 3. No primeiro boot, com o banco vazio, roda o seed: serviços, horários, termos, mensagens e o admin de `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, que precisa ter 8 ou mais caracteres. Enquanto não existir um admin, o seed roda de novo a cada boot; depois disso, não roda mais.
-4. Guarda fotos e comprovantes em `../studio85-storage`, também fora da pasta do app, a menos que `STORAGE_LOCAL_PATH` seja definida.
+4. Guarda fotos e comprovantes em `STORAGE_LOCAL_PATH`, ou em `~/studio85-storage` se ela não estiver definida. Use sempre um caminho **absoluto** fora da pasta do deploy: na Hostinger o app roda em `hbuilds/versions/<id>/`, que é apagada a cada deploy. Em produção: `/home/u433815487/domains/studio85poa.com.br/studio85-storage`.
 
 O modelo do arquivo de variáveis é o `apps/api/.env.production`, que fica fora do git. Antes do primeiro boot, preencha:
 
