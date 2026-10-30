@@ -11,3 +11,4 @@ export * from './schemas/service';
 export * from './schemas/settings';
 export * from './schemas/appointment';
 export * from './schemas/whatsapp';
+export * from './seo';

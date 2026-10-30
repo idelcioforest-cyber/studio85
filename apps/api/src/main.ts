@@ -2,12 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import * as path from 'path';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
+import { SeoService } from './modules/seo/seo.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -17,6 +18,16 @@ async function bootstrap() {
   // Atrás do proxy da hospedagem: o IP real do cliente vem no X-Forwarded-For (limite de tentativas por IP)
   if (process.env.TRUST_PROXY !== 'false' && isProduction) {
     app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
+  }
+
+  // Um endereço só para o Google: www.dominio → dominio (o de FRONTEND_URL), com 301
+  const canonicalOrigin = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+  if (isProduction && /^https?:\/\//.test(canonicalOrigin)) {
+    const canonicalHost = new URL(canonicalOrigin).hostname;
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.hostname === `www.${canonicalHost}`) return res.redirect(301, `${canonicalOrigin}${req.originalUrl}`);
+      next();
+    });
   }
 
   // 1. Headers de segurança HTTP via Helmet (ForestSecurity Seção 9)
@@ -96,6 +107,17 @@ async function bootstrap() {
   const webIndex = path.join(webDist, 'index.html');
   const serveWeb = existsSync(webIndex);
   if (serveWeb) {
+    const seo = app.get(SeoService);
+    const indexTemplate = readFileSync(webIndex, 'utf8');
+
+    // robots.txt e sitemap.xml gerados com o domínio de FRONTEND_URL
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      if (req.path === '/robots.txt') return res.type('text/plain').send(seo.robotsTxt());
+      if (req.path === '/sitemap.xml') return res.type('application/xml').send(seo.sitemapXml());
+      next();
+    });
+
     app.useStaticAssets(webDist, {
       index: false,
       setHeaders: (res, filePath) => {
@@ -104,13 +126,19 @@ async function bootstrap() {
         res.setHeader('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
       },
     });
-    // Rotas do React (/agenda, /admin/patio...) devolvem o index.html; /api e arquivos inexistentes seguem para o 404
-    app.use((req: Request, res: Response, next: NextFunction) => {
+    // Rotas do React (/agenda, /admin/patio...) devolvem o index.html já com título, descrição e dados
+    // da empresa daquela página (o Google lê sem rodar o JavaScript); /api e arquivos inexistentes vão para o 404
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
       if ((req.method !== 'GET' && req.method !== 'HEAD') || /^\/api(\/|$)/.test(req.path) || path.extname(req.path)) {
         return next();
       }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(webIndex);
+      try {
+        const html = await seo.renderIndex(indexTemplate, req.path);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.type('html').send(html);
+      } catch (error) {
+        next(error);
+      }
     });
   }
 

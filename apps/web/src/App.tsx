@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Link, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { pageMeta } from '@autowash/shared';
 import {
   Sparkles,
   Car,
@@ -52,6 +53,17 @@ function readInitialTheme(): boolean {
     // ignora
   }
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Título e descrição da aba acompanham a página (o HTML inicial já vem certo do servidor) */
+function RouteMeta() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const meta = pageMeta(pathname);
+    document.title = meta.title;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', meta.description);
+  }, [pathname]);
+  return null;
 }
 
 export default function App() {
@@ -265,6 +277,7 @@ export default function App() {
         </div>
       </footer>
 
+      <RouteMeta />
       <AuthModal />
       <CompleteProfileModal />
     </div>
