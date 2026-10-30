@@ -6,6 +6,7 @@ export * from './utils/cpf';
 export * from './utils/plate';
 export * from './utils/cnpj';
 export * from './utils/online-fee';
+export * from './utils/display-name';
 export * from './schemas/auth';
 export * from './schemas/vehicle';
 export * from './schemas/address';

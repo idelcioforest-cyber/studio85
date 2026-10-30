@@ -929,6 +929,47 @@ model WhatsAppMessage {
   @@map("whatsapp_messages")
 }
 
+// Aviso em massa: o dono escolhe até 20 contatos por vez e a fila manda um por minuto
+enum CampaignRecipientStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+model WhatsAppCampaign {
+  id        String   @id @default(uuid())
+  title     String   @db.VarChar(80)
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  recipients WhatsAppCampaignRecipient[]
+
+  @@map("whatsapp_campaigns")
+}
+
+model WhatsAppCampaignRecipient {
+  id          String                  @id @default(uuid())
+  campaignId  String                  @map("campaign_id")
+  // Celular normalizado (55 + DDD + número): o mesmo número nunca recebe o mesmo aviso duas vezes
+  phone       String                  @db.VarChar(20)
+  name        String                  @db.VarChar(120)
+  status      CampaignRecipientStatus @default(QUEUED)
+  error       String?                 @db.VarChar(500)
+  queuedAt    DateTime                @default(now()) @map("queued_at")
+  attemptedAt DateTime?               @map("attempted_at")
+  sentAt      DateTime?               @map("sent_at")
+
+  campaign WhatsAppCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, phone])
+  @@index([status, queuedAt])
+  @@index([attemptedAt])
+  @@map("whatsapp_campaign_recipients")
+}
+
 // -----------------------------------------------------------------------------
 // Assinaturas (planos mensais montados pelo dono, cobrados no cartão pelo Pagar.me)
 // -----------------------------------------------------------------------------

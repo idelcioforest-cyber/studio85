@@ -243,6 +243,8 @@ O modelo do arquivo de variáveis é o `apps/api/.env.production`, que fica fora
 
 A ponte do WhatsApp (`services/whatsapp-bridge`) precisa ficar ligada o tempo todo, então deve rodar numa VPS com PM2. Depois disso, ajuste `WHATSAPP_BRIDGE_URL` e `WHATSAPP_ENABLED=true`.
 
+**Avisos (WhatsApp em massa):** no menu Avisos, o dono escreve a mensagem (com `{primeiro_nome}`, `{nome}` e `{empresa}`) e escolhe até 20 contatos por vez: clientes com conta e clientes de balcão com celular, um por número. A fila fica no banco e manda uma mensagem por minuto, só com o número conectado; um lote novo só entra quando o anterior termina. O mesmo número nunca recebe o mesmo aviso duas vezes; quem não recebeu (falha ou envio parado) pode ser escolhido de novo. Cada envio também aparece em Configurações → WhatsApp → Últimos envios.
+
 ---
 
 ## 9. Pagamento online (Pagar.me com split) e Receita

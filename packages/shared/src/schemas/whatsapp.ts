@@ -26,3 +26,24 @@ export const NotifyAppointmentSchema = z.object({
 });
 
 export type NotifyAppointmentInput = z.infer<typeof NotifyAppointmentSchema>;
+
+// Aviso em massa: no máximo 20 contatos por envio, uma mensagem por minuto (protege o número de bloqueio)
+export const MAX_CAMPAIGN_BATCH = 20;
+export const CAMPAIGN_INTERVAL_SECONDS = 60;
+
+export const CampaignSchema = z.object({
+  title: z.string().trim().min(2, 'Dê um nome ao aviso').max(80, 'Nome muito longo'),
+  body: z.string().trim().min(5, 'A mensagem está muito curta').max(1000, 'A mensagem está muito longa'),
+});
+
+export type CampaignInput = z.infer<typeof CampaignSchema>;
+
+export const SendCampaignSchema = z.object({
+  phones: z
+    .array(z.string().regex(/^55\d{10,11}$/, 'Celular inválido'))
+    .min(1, 'Escolha ao menos um contato')
+    .max(MAX_CAMPAIGN_BATCH, `Escolha no máximo ${MAX_CAMPAIGN_BATCH} contatos por vez`)
+    .transform((phones) => [...new Set(phones)]),
+});
+
+export type SendCampaignInput = z.infer<typeof SendCampaignSchema>;

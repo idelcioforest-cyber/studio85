@@ -220,7 +220,9 @@ export function WhatsAppSettings() {
             return (
               <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span className="text-ink">
-                  {m.appointment ? `${m.appointment.customerName} · ${m.appointment.readableCode}` : `Teste · ${formatPhone(m.phone)}`}
+                  {m.appointment
+                    ? `${m.appointment.customerName} · ${m.appointment.readableCode}`
+                    : `${m.templateKey === 'AVISO' ? 'Aviso' : 'Teste'} · ${formatPhone(m.phone)}`}
                   {m.mediaCount > 0 && <span className="text-ink-muted"> · {m.mediaCount} foto(s)</span>}
                 </span>
                 <span className="text-xs text-ink-muted">

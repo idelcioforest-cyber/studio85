@@ -23,6 +23,10 @@ import {
   WhatsAppTestInput,
   NotifyAppointmentSchema,
   NotifyAppointmentInput,
+  CampaignSchema,
+  CampaignInput,
+  SendCampaignSchema,
+  SendCampaignInput,
   UserRole,
 } from '@autowash/shared';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -32,6 +36,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { WhatsAppBridgeService } from './whatsapp-bridge.service';
 import { NotificationsService, TEMPLATE_VARIABLES } from './notifications.service';
+import { CampaignsService } from './campaigns.service';
 
 @ApiTags('WhatsApp')
 @Controller()
@@ -39,6 +44,7 @@ export class WhatsAppController {
   constructor(
     private bridge: WhatsAppBridgeService,
     private notifications: NotificationsService,
+    private campaigns: CampaignsService,
   ) {}
 
   @ApiBearerAuth()
@@ -105,6 +111,69 @@ export class WhatsAppController {
   @ApiOperation({ summary: 'Enviar mensagem de teste' })
   async test(@Body(new ZodValidationPipe(WhatsAppTestSchema)) body: WhatsAppTestInput) {
     return this.notifications.sendTest(body.phone);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Get('admin/whatsapp/campaigns')
+  @ApiOperation({ summary: 'Avisos em massa e a fila de envio' })
+  async listCampaigns() {
+    return this.campaigns.list();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Post('admin/whatsapp/campaigns')
+  @ApiOperation({ summary: 'Criar aviso em massa' })
+  async createCampaign(@Body(new ZodValidationPipe(CampaignSchema)) body: CampaignInput) {
+    return this.campaigns.create(body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Get('admin/whatsapp/campaigns/:id')
+  @ApiOperation({ summary: 'Aviso com os contatos e a situação de cada um' })
+  async campaignDetail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.campaigns.detail(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Put('admin/whatsapp/campaigns/:id')
+  @ApiOperation({ summary: 'Editar aviso em massa' })
+  async updateCampaign(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(CampaignSchema)) body: CampaignInput) {
+    return this.campaigns.update(id, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Delete('admin/whatsapp/campaigns/:id')
+  @ApiOperation({ summary: 'Excluir aviso em massa' })
+  async removeCampaign(@Param('id', ParseUUIDPipe) id: string) {
+    return this.campaigns.remove(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Post('admin/whatsapp/campaigns/:id/send')
+  @ApiOperation({ summary: 'Mandar o aviso para até 20 contatos (um por minuto)' })
+  async sendCampaign(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(SendCampaignSchema)) body: SendCampaignInput) {
+    return this.campaigns.send(id, body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Post('admin/whatsapp/campaigns/:id/cancel')
+  @ApiOperation({ summary: 'Parar o envio do aviso' })
+  async cancelCampaign(@Param('id', ParseUUIDPipe) id: string) {
+    return this.campaigns.cancel(id);
   }
 
   @ApiBearerAuth()

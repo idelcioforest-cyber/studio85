@@ -18,6 +18,7 @@ import {
   DollarSign,
   MessageCircle,
   Repeat,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from './lib/api';
@@ -39,6 +40,7 @@ import AdminPagamentosPage from './pages/AdminPagamentosPage';
 import AdminReceitaPage from './pages/AdminReceitaPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import AdminAssinaturasPage from './pages/AdminAssinaturasPage';
+import AdminAvisosPage from './pages/AdminAvisosPage';
 import SubscriptionSetupPage from './pages/SubscriptionSetupPage';
 import ClientAppointmentsPage from './pages/ClientAppointmentsPage';
 import LegalPage from './pages/LegalPage';
@@ -103,6 +105,7 @@ export default function App() {
       ...(adminSettings?.subscriptionsEnabled
         ? [{ to: '/admin/assinaturas', label: 'Assinaturas', shortLabel: 'Planos', icon: Repeat }]
         : []),
+      { to: '/admin/avisos', label: 'Avisos', shortLabel: 'Avisos', icon: Megaphone },
       { to: '/admin/configuracoes', label: 'Configurações', shortLabel: 'Ajustes', icon: Settings },
     ];
   } else if (isLoggedIn) {
@@ -213,6 +216,7 @@ export default function App() {
           <Route path="/admin/receita" element={adminOnly(<AdminReceitaPage />)} />
           <Route path="/admin/configuracoes" element={adminOnly(<AdminSettingsPage />)} />
           <Route path="/admin/assinaturas" element={adminOnly(<AdminAssinaturasPage />)} />
+          <Route path="/admin/avisos" element={adminOnly(<AdminAvisosPage />)} />
           {/* Link privado que o dono manda ao cliente: não aparece em menu nenhum */}
           <Route path="/assinatura/:token" element={<SubscriptionSetupPage />} />
 
