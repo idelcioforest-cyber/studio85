@@ -72,7 +72,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
-        className={`card animate-fadeIn relative my-8 w-full p-5 shadow-2xl sm:p-6 ${size === 'lg' ? 'max-w-2xl' : 'max-w-md'}`}
+        className={`card animate-fadeIn relative my-8 w-full p-5 text-left shadow-2xl sm:p-6 ${size === 'lg' ? 'max-w-2xl' : 'max-w-md'}`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

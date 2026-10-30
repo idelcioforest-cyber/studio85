@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScheduleService, NON_BLOCKING_STATUSES } from '../schedule/schedule.service';
 import { NotificationsService } from '../whatsapp/notifications.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { resolveSelectionPricing } from '../services/pricing.util';
 import {
   CreateAppointmentInput,
@@ -85,6 +86,8 @@ function toDto(a: AppointmentWithServices) {
     endsAt: a.endsAt,
     totalPriceCents: a.totalPriceCents,
     telebuscaFeeCents: a.telebuscaFeeCents,
+    // Valor dos serviços cobertos pela assinatura (já fora do total)
+    subscriptionCoveredCents: a.subscriptionCoveredCents,
     isTelebusca: a.isTelebusca,
     customerName: a.customerName,
     customerPhone: a.customerPhone,
@@ -99,6 +102,7 @@ function toDto(a: AppointmentWithServices) {
       name: s.serviceNameSnapshot,
       priceCents: s.unitPriceCents,
       durationMinutes: s.durationMinutes,
+      coveredBySubscription: s.coveredBySubscription,
     })),
     payment: paid
       ? {
@@ -143,6 +147,7 @@ export class AppointmentsService {
     private prisma: PrismaService,
     private schedule: ScheduleService,
     private notifications: NotificationsService,
+    private subscriptions: SubscriptionsService,
   ) {}
 
   /**
@@ -200,6 +205,7 @@ export class AppointmentsService {
           throw new BadRequestException('Este veículo já tem um agendamento neste horário.');
         }
 
+        const plan = await this.subscriptionPricing(tx, pricing, { userId, vehicleId: vehicle.id, startsAt });
         return tx.appointment.create({
           data: {
             readableCode: await this.generateCode(tx),
@@ -214,8 +220,10 @@ export class AppointmentsService {
             startsAt,
             endsAt,
             status: 'CONFIRMED',
-            totalPriceCents: pricing.priceCents + telebuscaFeeCents,
+            totalPriceCents: pricing.priceCents - plan.coveredCents + telebuscaFeeCents,
             telebuscaFeeCents,
+            subscriptionId: plan.subscriptionId,
+            subscriptionCoveredCents: plan.coveredCents,
             isTelebusca: Boolean(pickupAddress),
             pickupAddressId: pickupAddress?.id ?? null,
             pickupAddressSnapshot: pickupAddress
@@ -231,9 +239,9 @@ export class AppointmentsService {
                 })
               : null,
             telebuscaStatus: pickupAddress ? 'PENDING' : null,
-            priceSnapshotJson: this.priceSnapshot(pricing, vehicle.sizeCategory, telebuscaFeeCents),
+            priceSnapshotJson: this.priceSnapshot(pricing, vehicle.sizeCategory, telebuscaFeeCents, plan.coveredCents),
             clientNotes: input.notes || null,
-            services: { create: this.serviceItems(pricing) },
+            services: { create: this.serviceItems(pricing, plan.covered) },
           },
           include: APPOINTMENT_INCLUDE,
         });
@@ -412,27 +420,33 @@ export class AppointmentsService {
     const startsAt = new Date();
     const endsAt = new Date(startsAt.getTime() + pricing.durationMinutes * 60000);
 
-    const created = await this.prisma.appointment.create({
-      data: {
-        readableCode: await this.generateCode(this.prisma),
-        source: 'WALK_IN',
-        userId,
-        vehicleId,
-        customerName,
-        customerPhone,
-        vehiclePlate,
-        vehicleLabel,
-        vehicleSize,
-        startsAt,
-        endsAt,
-        status: 'CHECK_IN',
-        totalPriceCents: pricing.priceCents,
-        priceSnapshotJson: this.priceSnapshot(pricing, vehicleSize, 0),
-        clientNotes: input.notes || null,
-        services: { create: this.serviceItems(pricing) },
-      },
-      include: APPOINTMENT_INCLUDE,
-    });
+    const created = await this.prisma.$transaction(async (tx) => {
+      const plan = await this.subscriptionPricing(tx, pricing, { userId, vehicleId, startsAt });
+      return tx.appointment.create({
+        data: {
+          readableCode: await this.generateCode(tx),
+          source: 'WALK_IN',
+          userId,
+          vehicleId,
+          customerName,
+          customerPhone,
+          vehiclePlate,
+          vehicleLabel,
+          vehicleSize,
+          startsAt,
+          endsAt,
+          status: 'CHECK_IN',
+          totalPriceCents: pricing.priceCents - plan.coveredCents,
+          subscriptionId: plan.subscriptionId,
+          subscriptionCoveredCents: plan.coveredCents,
+          priceSnapshotJson: this.priceSnapshot(pricing, vehicleSize, 0, plan.coveredCents),
+          clientNotes: input.notes || null,
+          services: { create: this.serviceItems(pricing, plan.covered) },
+        },
+        include: APPOINTMENT_INCLUDE,
+      });
+      // Read Committed: depois da trava da assinatura, a contagem do mês enxerga reservas recém-confirmadas
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 
     return { success: true, message: 'Entrada registrada.', appointment: toDto(created) };
   }
@@ -759,6 +773,7 @@ export class AppointmentsService {
           throw new BadRequestException('Este veículo já tem um agendamento neste horário.');
         }
 
+        const plan = await this.subscriptionPricing(tx, pricing, { userId: customer.id, vehicleId: car.id, startsAt });
         return tx.appointment.create({
           data: {
             readableCode: await this.generateCode(tx),
@@ -773,10 +788,12 @@ export class AppointmentsService {
             startsAt,
             endsAt,
             status: 'CONFIRMED',
-            totalPriceCents: pricing.priceCents,
-            priceSnapshotJson: this.priceSnapshot(pricing, car.sizeCategory, 0),
+            totalPriceCents: pricing.priceCents - plan.coveredCents,
+            subscriptionId: plan.subscriptionId,
+            subscriptionCoveredCents: plan.coveredCents,
+            priceSnapshotJson: this.priceSnapshot(pricing, car.sizeCategory, 0, plan.coveredCents),
             clientNotes: input.notes || null,
-            services: { create: this.serviceItems(pricing) },
+            services: { create: this.serviceItems(pricing, plan.covered) },
           },
           include: APPOINTMENT_INCLUDE,
         });
@@ -927,7 +944,8 @@ export class AppointmentsService {
       include: APPOINTMENT_INCLUDE,
       orderBy: { startsAt: 'asc' },
     });
-    const pending = candidates.map(toDto).filter((a) => a.payment.status === 'PENDING');
+    // Totalmente coberto pela assinatura não tem nada a receber
+    const pending = candidates.map(toDto).filter((a) => a.payment.status === 'PENDING' && a.totalPriceCents > 0);
 
     return {
       date: day,
@@ -966,10 +984,29 @@ export class AppointmentsService {
     return selection;
   }
 
+  /**
+   * Assinatura do veículo com o período pago cobrindo a data e lavagens sobrando no mês:
+   * os serviços do plano saem do total. Roda dentro da transação (a assinatura fica travada).
+   */
+  private async subscriptionPricing(
+    tx: Prisma.TransactionClient,
+    pricing: ReturnType<AppointmentsService['priceSelection']>,
+    args: { userId: string | null; vehicleId: string | null; startsAt: Date },
+  ) {
+    const coverage = await this.subscriptions.coverage(tx, { ...args, serviceIds: pricing.items.map((i) => i.service.id) });
+    const covered = coverage?.covered ?? new Set<string>();
+    return {
+      subscriptionId: coverage?.subscriptionId ?? null,
+      covered,
+      coveredCents: pricing.items.filter((i) => covered.has(i.service.id)).reduce((acc, i) => acc + i.priceCents, 0),
+    };
+  }
+
   private priceSnapshot(
     pricing: ReturnType<AppointmentsService['priceSelection']>,
     sizeCategory: string,
     telebuscaFeeCents: number,
+    subscriptionCoveredCents = 0,
   ) {
     return JSON.stringify({
       sizeCategory,
@@ -982,15 +1019,17 @@ export class AppointmentsService {
       servicesPriceCents: pricing.priceCents,
       durationMinutes: pricing.durationMinutes,
       telebuscaFeeCents,
+      subscriptionCoveredCents,
     });
   }
 
-  private serviceItems(pricing: ReturnType<AppointmentsService['priceSelection']>) {
+  private serviceItems(pricing: ReturnType<AppointmentsService['priceSelection']>, covered = new Set<string>()) {
     return pricing.items.map((i) => ({
       serviceId: i.service.id,
       serviceNameSnapshot: i.service.name,
       unitPriceCents: i.priceCents,
       durationMinutes: i.durationMinutes,
+      coveredBySubscription: covered.has(i.service.id),
     }));
   }
 

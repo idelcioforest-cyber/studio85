@@ -97,6 +97,11 @@ export function formatDateLong(date: string): string {
 }
 
 /** Data e hora de um instante ISO no fuso do estabelecimento */
+/** Data completa no fuso da loja: 29/11/2026 */
+export function formatDateShort(iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: SHOP_TIMEZONE }).format(new Date(iso));
+}
+
 export function formatDateTime(iso: string): { date: string; time: string } {
   const d = new Date(iso);
   return {

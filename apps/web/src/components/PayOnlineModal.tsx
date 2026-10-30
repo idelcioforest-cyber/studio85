@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Copy, CreditCard, QrCode } from 'lucide-react';
 import { Modal } from './Modal';
 import { api } from '../lib/api';
+import { FeeCharge, OnlineFeeRates, cardCharge, pixCharge } from '@autowash/shared';
 import { formatPrice } from '../lib/format';
 import { Appointment } from '../lib/types';
 
@@ -10,6 +11,48 @@ export interface OnlineConfig {
   enabled: boolean;
   publicKey: string | null;
   maxInstallments: number;
+  // Taxas do Pagar.me pagas pelo cliente
+  fees: Omit<OnlineFeeRates, 'maxInstallments'>;
+}
+
+export interface CardInput {
+  number: string;
+  holder: string;
+  expiry: string;
+  cvv: string;
+}
+
+export const emptyCard: CardInput = { number: '', holder: '', expiry: '', cvv: '' };
+
+export function ratesOf(config: OnlineConfig | undefined): OnlineFeeRates {
+  return {
+    pixPercentBp: config?.fees?.pixPercentBp ?? 0,
+    pixFixedCents: config?.fees?.pixFixedCents ?? 0,
+    cardFixedCents: config?.fees?.cardFixedCents ?? 0,
+    cardPercentBp: config?.fees?.cardPercentBp ?? [],
+    maxInstallments: config?.maxInstallments ?? 1,
+  };
+}
+
+/** Serviço, taxa do pagamento online e total, para o cliente ver antes de pagar */
+export function FeeBreakdown({ charge, label = 'Serviço' }: { charge: FeeCharge; label?: string }) {
+  if (charge.feeCents <= 0) return null;
+  return (
+    <dl className="space-y-1 rounded-xl bg-subtle p-3 text-sm">
+      <div className="flex justify-between gap-3">
+        <dt className="text-ink-muted">{label}</dt>
+        <dd className="text-ink">{formatPrice(charge.baseCents)}</dd>
+      </div>
+      <div className="flex justify-between gap-3">
+        <dt className="text-ink-muted">Taxa do pagamento online</dt>
+        <dd className="text-ink">{formatPrice(charge.feeCents)}</dd>
+      </div>
+      <div className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
+        <dt className="text-ink">Total</dt>
+        <dd className="text-ink">{formatPrice(charge.totalCents)}</dd>
+      </div>
+    </dl>
+  );
 }
 
 interface OnlinePayment {
@@ -32,7 +75,7 @@ export function useOnlinePayment() {
 }
 
 /** O número do cartão vai direto para o Pagar.me; o nosso servidor só recebe o token */
-async function tokenizeCard(publicKey: string, card: { number: string; holder: string; expiry: string; cvv: string }) {
+export async function tokenizeCard(publicKey: string, card: CardInput) {
   const [month, year] = card.expiry.split('/').map((v) => v.trim());
   const response = await fetch(`https://api.pagar.me/core/v5/tokens?appId=${encodeURIComponent(publicKey)}`, {
     method: 'POST',
@@ -67,13 +110,15 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
   const [payment, setPayment] = useState<OnlinePayment | null>(null);
   const [copied, setCopied] = useState(false);
   const [, tick] = useState(0);
-  const [card, setCard] = useState({ number: '', holder: '', expiry: '', cvv: '', installments: 1 });
+  const [card, setCard] = useState<CardInput>(emptyCard);
+  const [installments, setInstallments] = useState(1);
 
   useEffect(() => {
     setTab('PIX');
     setPayment(null);
     setCopied(false);
-    setCard({ number: '', holder: '', expiry: '', cvv: '', installments: 1 });
+    setCard(emptyCard);
+    setInstallments(1);
   }, [appointment?.id]);
 
   const pix = useMutation({
@@ -86,7 +131,7 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
       const cardToken = await tokenizeCard(config!.publicKey!, card);
       return api<OnlinePayment>(`/appointments/${appointment!.id}/payments/card`, {
         method: 'POST',
-        body: { cardToken, installments: card.installments },
+        body: { cardToken, installments },
       });
     },
     onSuccess: setPayment,
@@ -118,7 +163,10 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
   }, [payment?.status, queryClient]);
 
   if (!appointment) return null;
-  const total = formatPrice(appointment.totalPriceCents);
+  const rates = ratesOf(config);
+  const pixPrice = pixCharge(appointment.totalPriceCents, rates);
+  const cardPrice = cardCharge(appointment.totalPriceCents, installments, rates);
+  const hasFee = pixPrice.feeCents > 0 || cardPrice.feeCents > 0;
 
   if (payment?.status === 'PAID') {
     return (
@@ -141,7 +189,16 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
   const error = pix.error || payCard.error;
 
   return (
-    <Modal open onClose={onClose} title="Pagar agora" description={`Total de ${total}. Se preferir, você também pode pagar na loja.`}>
+    <Modal
+      open
+      onClose={onClose}
+      title="Pagar agora"
+      description={
+        hasFee
+          ? `Serviço de ${formatPrice(appointment.totalPriceCents)}. O pagamento online tem uma taxa; na loja você paga só o serviço.`
+          : `Total de ${formatPrice(appointment.totalPriceCents)}. Se preferir, você também pode pagar na loja.`
+      }
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-1 rounded-xl bg-subtle p-1" role="tablist" aria-label="Forma de pagamento">
           {(
@@ -212,10 +269,13 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
               </p>
             </div>
           ) : (
-            <button type="button" onClick={() => pix.mutate()} disabled={pix.isPending} className="btn-primary w-full">
-              <QrCode className="h-4 w-4" aria-hidden="true" />
-              {pix.isPending ? 'Gerando Pix…' : `Gerar Pix de ${total}`}
-            </button>
+            <div className="space-y-3">
+              <FeeBreakdown charge={pixPrice} />
+              <button type="button" onClick={() => pix.mutate()} disabled={pix.isPending} className="btn-primary w-full">
+                <QrCode className="h-4 w-4" aria-hidden="true" />
+                {pix.isPending ? 'Gerando Pix…' : `Gerar Pix de ${formatPrice(pixPrice.totalCents)}`}
+              </button>
+            </div>
           ))}
 
         {tab === 'CREDIT_CARD' && (
@@ -226,84 +286,86 @@ export function PayOnlineModal({ appointment, config, onClose }: { appointment: 
             }}
             className="space-y-3"
           >
-            <div>
-              <label htmlFor="card-number" className="label">Número do cartão</label>
-              <input
-                id="card-number"
-                inputMode="numeric"
-                autoComplete="cc-number"
-                required
-                value={card.number}
-                onChange={(e) => setCard({ ...card, number: e.target.value.replace(/[^\d ]/g, '').slice(0, 23) })}
-                className="field font-mono"
-              />
-            </div>
-            <div>
-              <label htmlFor="card-holder" className="label">Nome impresso no cartão</label>
-              <input
-                id="card-holder"
-                autoComplete="cc-name"
-                required
-                value={card.holder}
-                onChange={(e) => setCard({ ...card, holder: e.target.value })}
-                className="field"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="card-expiry" className="label">Validade (MM/AA)</label>
-                <input
-                  id="card-expiry"
-                  inputMode="numeric"
-                  autoComplete="cc-exp"
-                  placeholder="08/29"
-                  required
-                  value={card.expiry}
-                  onChange={(e) => {
-                    const d = e.target.value.replace(/\D/g, '').slice(0, 4);
-                    setCard({ ...card, expiry: d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d });
-                  }}
-                  className="field font-mono"
-                />
-              </div>
-              <div>
-                <label htmlFor="card-cvv" className="label">CVV</label>
-                <input
-                  id="card-cvv"
-                  inputMode="numeric"
-                  autoComplete="cc-csc"
-                  required
-                  value={card.cvv}
-                  onChange={(e) => setCard({ ...card, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}
-                  className="field font-mono"
-                />
-              </div>
-            </div>
-            {(config?.maxInstallments ?? 1) > 1 && (
+            <CardFields card={card} onChange={setCard} />
+            {rates.maxInstallments > 1 && (
               <div>
                 <label htmlFor="card-installments" className="label">Parcelas</label>
-                <select
-                  id="card-installments"
-                  value={card.installments}
-                  onChange={(e) => setCard({ ...card, installments: Number(e.target.value) })}
-                  className="field"
-                >
-                  {Array.from({ length: config!.maxInstallments }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n}x de {formatPrice(Math.ceil(appointment.totalPriceCents / n))}
-                    </option>
-                  ))}
+                <select id="card-installments" value={installments} onChange={(e) => setInstallments(Number(e.target.value))} className="field">
+                  {Array.from({ length: rates.maxInstallments }, (_, i) => i + 1).map((n) => {
+                    const option = cardCharge(appointment.totalPriceCents, n, rates);
+                    return (
+                      <option key={n} value={n}>
+                        {n}x de {formatPrice(Math.ceil(option.totalCents / n))}
+                        {n > 1 ? ` (total ${formatPrice(option.totalCents)})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
+            <FeeBreakdown charge={cardPrice} />
             <p className="text-xs text-ink-muted">Os dados do cartão vão direto para o Pagar.me, com segurança. O Studio 85 não guarda o número.</p>
             <button type="submit" disabled={payCard.isPending} className="btn-primary w-full">
               <CreditCard className="h-4 w-4" aria-hidden="true" />
-              {payCard.isPending ? 'Processando…' : `Pagar ${total}`}
+              {payCard.isPending ? 'Processando…' : `Pagar ${formatPrice(cardPrice.totalCents)}`}
             </button>
           </form>
         )}
       </div>
     </Modal>
+  );
+}
+
+/** Número, nome, validade e CVV: os dados vão direto do navegador para o Pagar.me */
+export function CardFields({ card, onChange }: { card: CardInput; onChange: (card: CardInput) => void }) {
+  return (
+    <>
+      <div>
+        <label htmlFor="card-number" className="label">Número do cartão</label>
+        <input
+          id="card-number"
+          inputMode="numeric"
+          autoComplete="cc-number"
+          required
+          value={card.number}
+          onChange={(e) => onChange({ ...card, number: e.target.value.replace(/[^\d ]/g, '').slice(0, 23) })}
+          className="field font-mono"
+        />
+      </div>
+      <div>
+        <label htmlFor="card-holder" className="label">Nome impresso no cartão</label>
+        <input id="card-holder" autoComplete="cc-name" required value={card.holder} onChange={(e) => onChange({ ...card, holder: e.target.value })} className="field" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="card-expiry" className="label">Validade (MM/AA)</label>
+          <input
+            id="card-expiry"
+            inputMode="numeric"
+            autoComplete="cc-exp"
+            placeholder="08/29"
+            required
+            value={card.expiry}
+            onChange={(e) => {
+              const d = e.target.value.replace(/\D/g, '').slice(0, 4);
+              onChange({ ...card, expiry: d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d });
+            }}
+            className="field font-mono"
+          />
+        </div>
+        <div>
+          <label htmlFor="card-cvv" className="label">CVV</label>
+          <input
+            id="card-cvv"
+            inputMode="numeric"
+            autoComplete="cc-csc"
+            required
+            value={card.cvv}
+            onChange={(e) => onChange({ ...card, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+            className="field font-mono"
+          />
+        </div>
+      </div>
+    </>
   );
 }

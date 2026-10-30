@@ -30,11 +30,6 @@ export const pagarmeConfig = {
   get webhookPass(): string {
     return process.env.PAGARME_WEBHOOK_PASS || '';
   },
-  /** Parcelas no cartão (padrão 1x) */
-  get maxInstallments(): number {
-    const value = Number(process.env.PAGARME_MAX_INSTALLMENTS ?? 1);
-    return Number.isInteger(value) && value >= 1 && value <= 12 ? value : 1;
-  },
   /**
    * Temporário: enquanto o lava-jato não tem recebedor liberado, o pagamento online cai inteiro
    * na conta da plataforma, sem divisão. Com o recebedor liberado, a divisão volta sozinha.

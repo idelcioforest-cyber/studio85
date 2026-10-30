@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { addDays, toZonedDateString, zonedTimeToUtc } from '../../common/utils/timezone.util';
-import { platformShareCents } from '../pagarme/split-builder';
+import { customerFeeKept, platformShareCents } from '../pagarme/split-builder';
 
 type PaymentRow = Prisma.PaymentGetPayload<{ include: { order: { include: { appointment: { include: { services: true } } } } } }>;
 
@@ -110,11 +110,12 @@ export class RevenueService {
     const orders = new Set<string>();
     const customers = new Set<string>();
     for (const p of payments) {
-      grossCents += p.amountCents;
-      refundsCents += p.refundedCents;
+      grossCents += serviceGross(p);
+      refundsCents += serviceGross(p) - net(p);
       if (p.provider === 'PAGARME') {
         onlineCents += net(p);
-        commissionCents += platformShareCents(net(p), p.platformFeePercent ?? 0);
+        // A comissão incide sobre o que o Pagar.me dividiu (valor cobrado menos o estornado)
+        commissionCents += platformShareCents(p.amountCents - p.refundedCents, p.platformFeePercent ?? 0);
       } else {
         storeCents += net(p);
         discountCents += Math.max(0, p.order.discountCents);
@@ -140,7 +141,7 @@ export class RevenueService {
   }
 
   private refundsOf(payments: PaymentRow[], provider: 'ON_DELIVERY' | 'PAGARME') {
-    return payments.filter((p) => p.provider === provider).reduce((acc, p) => acc + p.refundedCents, 0);
+    return payments.filter((p) => p.provider === provider).reduce((acc, p) => acc + serviceGross(p) - net(p), 0);
   }
 
   /** Um ponto por dia (ou mês) do período, inclusive os sem movimento */
@@ -169,6 +170,14 @@ export class RevenueService {
   private byService(payments: PaymentRow[]) {
     const services = new Map<string, { name: string; cents: number; count: number }>();
     for (const p of payments) {
+      // Mensalidade de assinatura não tem agendamento: entra numa linha própria
+      if (!p.order.appointment && p.order.subscriptionId) {
+        const row = services.get('Assinaturas') ?? { name: 'Assinaturas', cents: 0, count: 0 };
+        row.cents += net(p);
+        row.count++;
+        services.set('Assinaturas', row);
+        continue;
+      }
       const items = p.order.appointment?.services ?? [];
       const base = items.reduce((acc, s) => acc + s.unitPriceCents, 0);
       for (const s of items) {
@@ -220,8 +229,15 @@ export class RevenueService {
   }
 }
 
-function net(p: { amountCents: number; refundedCents: number }) {
-  return p.amountCents - p.refundedCents;
+type Money = { amountCents: number; refundedCents: number; customerFeeCents: number };
+
+/** Valor do serviço: a taxa do pagamento online paga pelo cliente fica com o Pagar.me, não é receita */
+function serviceGross(p: Money) {
+  return p.amountCents - p.customerFeeCents;
+}
+
+function net(p: Money) {
+  return p.amountCents - p.refundedCents - customerFeeKept(p);
 }
 
 function daysBetween(from: string, to: string) {

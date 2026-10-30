@@ -186,6 +186,7 @@ export default function AdminPatioPage() {
                     · {formatPrice(a.payment.status === 'PAID' ? a.payment.amountCents : a.totalPriceCents)}
                     {a.payment.status === 'PAID' && a.payment.adjustmentCents !== 0 && ` (${adjustmentLabel(a.payment.adjustmentCents).toLowerCase()})`}
                   </span>
+                  {a.subscriptionCoveredCents > 0 && <span className="text-success"> · Assinatura</span>}
                   {a.isTelebusca && <span className="text-info"> · Telebusca</span>}
                 </p>
                 <p className="text-sm text-ink-muted">
@@ -239,6 +240,10 @@ export default function AdminPatioPage() {
                 {a.payment.status === 'PAID' ? (
                   <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
                     {a.payment.provider === 'PAGARME' ? 'Pago online' : 'Pago'} · {paymentMethodLabels[a.payment.method]}
+                  </span>
+                ) : a.totalPriceCents === 0 && a.subscriptionCoveredCents > 0 ? (
+                  <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
+                    Coberto pela assinatura
                   </span>
                 ) : (
                   !['CANCELLED', 'NO_SHOW'].includes(a.status) && (

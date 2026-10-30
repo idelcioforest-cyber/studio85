@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Routes, Route, Link, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { pageMeta } from '@autowash/shared';
 import {
@@ -16,8 +17,10 @@ import {
   ArrowUpDown,
   DollarSign,
   MessageCircle,
+  Repeat,
   type LucideIcon,
 } from 'lucide-react';
+import { api } from './lib/api';
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { CompleteProfileModal } from './components/CompleteProfileModal';
@@ -35,6 +38,8 @@ import AdminFinanceiroPage from './pages/AdminFinanceiroPage';
 import AdminPagamentosPage from './pages/AdminPagamentosPage';
 import AdminReceitaPage from './pages/AdminReceitaPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
+import AdminAssinaturasPage from './pages/AdminAssinaturasPage';
+import SubscriptionSetupPage from './pages/SubscriptionSetupPage';
 import ClientAppointmentsPage from './pages/ClientAppointmentsPage';
 import LegalPage from './pages/LegalPage';
 
@@ -71,6 +76,12 @@ function RouteMeta() {
 export default function App() {
   const { user, isLoggedIn, isAdmin, logout, openAuthModal } = useAuth();
   const { data: settings } = usePublicSettings();
+  // Assinaturas só aparecem no painel quando o dono libera (o site público nunca fica sabendo)
+  const { data: adminSettings } = useQuery({
+    queryKey: ['admin', 'settings'],
+    queryFn: () => api<{ subscriptionsEnabled: boolean }>('/settings/admin'),
+    enabled: isAdmin,
+  });
   const [darkMode, setDarkMode] = useState<boolean>(readInitialTheme);
 
   useEffect(() => {
@@ -89,6 +100,9 @@ export default function App() {
       { to: '/admin/agenda', label: 'Agenda', shortLabel: 'Agenda', icon: CalendarDays },
       { to: '/admin/servicos', label: 'Serviços', shortLabel: 'Serviços', icon: Layers },
       { to: '/admin/financeiro', label: 'Caixa', shortLabel: 'Caixa', icon: DollarSign },
+      ...(adminSettings?.subscriptionsEnabled
+        ? [{ to: '/admin/assinaturas', label: 'Assinaturas', shortLabel: 'Planos', icon: Repeat }]
+        : []),
       { to: '/admin/configuracoes', label: 'Configurações', shortLabel: 'Ajustes', icon: Settings },
     ];
   } else if (isLoggedIn) {
@@ -198,6 +212,9 @@ export default function App() {
           <Route path="/admin/pagamentos" element={adminOnly(<AdminPagamentosPage />)} />
           <Route path="/admin/receita" element={adminOnly(<AdminReceitaPage />)} />
           <Route path="/admin/configuracoes" element={adminOnly(<AdminSettingsPage />)} />
+          <Route path="/admin/assinaturas" element={adminOnly(<AdminAssinaturasPage />)} />
+          {/* Link privado que o dono manda ao cliente: não aparece em menu nenhum */}
+          <Route path="/assinatura/:token" element={<SubscriptionSetupPage />} />
 
           <Route path="/" element={isAdmin ? <Navigate to="/admin/patio" replace /> : <CatalogPage />} />
           <Route path="/agenda" element={isAdmin ? <Navigate to="/admin/patio" replace /> : <AgendaPage />} />

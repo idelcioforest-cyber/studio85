@@ -24,6 +24,17 @@ import {
 } from '../lib/format';
 import { Appointment, Availability, OpeningHours, SlotStatus } from '../lib/types';
 
+interface MySubscription {
+  vehicleId: string;
+  planName: string;
+  serviceIds: string[];
+  remaining: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+}
+
+const shopDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: SHOP_TIMEZONE }).format(new Date(iso));
+
 const DAYS_SHOWN = 14;
 const shiftLabels: Record<string, string> = { MANHA: 'Manhã', TARDE: 'Tarde', NOITE: 'Noite', EXTRA: 'Horário extra' };
 
@@ -199,7 +210,25 @@ export default function AgendaPage() {
 
   const selectedTime = time ?? (availability?.freeTime && /^\d{2}:\d{2}$/.test(customTime) ? customTime : null);
   const telebuscaFee = telebusca ? settings?.telebuscaFeeCents ?? 0 : 0;
-  const total = servicesPrice + telebuscaFee;
+
+  // Só quem assina recebe algo aqui; para os demais a lista vem vazia e nada muda na tela.
+  // É uma prévia: o servidor confirma ao agendar (data dentro do período pago e lavagens sobrando).
+  const { data: mySubscriptions = [] } = useQuery({
+    queryKey: ['subscriptions', 'mine'],
+    queryFn: () => api<MySubscription[]>('/subscriptions/mine'),
+    enabled: isLoggedIn,
+  });
+  const subscription = vehicle ? mySubscriptions.find((s) => s.vehicleId === vehicle.id) : undefined;
+  const subscriptionCoversDate = Boolean(
+    subscription &&
+      subscription.remaining > 0 &&
+      date &&
+      (!subscription.periodStart || date >= shopDay(subscription.periodStart)) &&
+      (!subscription.periodEnd || date < shopDay(subscription.periodEnd)),
+  );
+  const coveredIds = new Set(subscriptionCoversDate ? subscription!.serviceIds : []);
+  const coveredCents = selected.filter((s) => coveredIds.has(s.id)).reduce((acc, s) => acc + s.priceCents, 0);
+  const total = servicesPrice - coveredCents + telebuscaFee;
 
   const missing = [
     selected.length === 0 && 'serviço',
@@ -228,6 +257,7 @@ export default function AgendaPage() {
       writeDraft(null);
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       queryClient.invalidateQueries({ queryKey: ['availability'] });
+      queryClient.invalidateQueries({ queryKey: ['subscriptions', 'mine'] });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     onError: (err) => {
@@ -261,6 +291,9 @@ export default function AgendaPage() {
           <SummaryRow label="Veículo" value={`${confirmed.vehicleLabel} · ${formatPlate(confirmed.vehiclePlate)}`} />
           <SummaryRow label="Data" value={when.date} />
           <SummaryRow label="Horário" value={when.time} />
+          {confirmed.subscriptionCoveredCents > 0 && (
+            <SummaryRow label="Pela assinatura" value={`- ${formatPrice(confirmed.subscriptionCoveredCents)}`} />
+          )}
           <SummaryRow label="Total" value={formatPrice(confirmed.totalPriceCents)} />
         </dl>
         <p className="mt-4 text-sm text-ink-muted">
@@ -269,7 +302,7 @@ export default function AgendaPage() {
             : 'Pagamento no local, na retirada.'}{' '}
           Você pode cancelar pelo app enquanto o atendimento não começar e não estiver pago.
         </p>
-        {onlineConfig?.enabled && confirmed.payment.status !== 'PAID' && (
+        {onlineConfig?.enabled && confirmed.payment.status !== 'PAID' && confirmed.totalPriceCents > 0 && (
           <button type="button" onClick={() => setPayingNow(true)} className="btn-primary mt-4 w-full">
             Pagar agora com Pix ou cartão
           </button>
@@ -535,7 +568,7 @@ export default function AgendaPage() {
           <dl className="space-y-2 text-sm">
             {selected.length === 0 && <SummaryRow label="Serviço" value="—" />}
             {selected.map((s) => (
-              <SummaryRow key={s.id} label={s.name} value={formatPrice(s.priceCents)} />
+              <SummaryRow key={s.id} label={s.name} value={coveredIds.has(s.id) ? 'Incluso na assinatura' : formatPrice(s.priceCents)} />
             ))}
             <SummaryRow
               label="Veículo"
@@ -552,6 +585,13 @@ export default function AgendaPage() {
             <span className="text-sm font-semibold text-ink">Total</span>
             <span className="text-2xl font-extrabold text-ink">{selected.length > 0 ? formatPrice(total) : '—'}</span>
           </div>
+          {subscription && (
+            <p className="text-xs font-semibold text-success">
+              {subscription.remaining > 0
+                ? `Assinatura ${subscription.planName}: ${subscription.remaining} lavagem(ns) restante(s) neste período.`
+                : `Assinatura ${subscription.planName}: as lavagens deste período já foram usadas.`}
+            </p>
+          )}
           <p className="text-xs text-ink-muted">
             {onlineConfig?.enabled
               ? 'Depois de confirmar, pague online com Pix ou cartão, ou no local, na retirada do veículo.'

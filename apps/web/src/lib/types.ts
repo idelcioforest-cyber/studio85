@@ -63,6 +63,8 @@ export interface Appointment {
   endsAt: string;
   totalPriceCents: number;
   telebuscaFeeCents: number;
+  // Valor dos serviços cobertos pela assinatura (já fora do total)
+  subscriptionCoveredCents: number;
   isTelebusca: boolean;
   customerName: string;
   customerPhone: string | null;
@@ -72,7 +74,7 @@ export interface Appointment {
   notes: string | null;
   cancelledAt: string | null;
   cancellationReason?: string | null;
-  services: { name: string; priceCents: number; durationMinutes: number }[];
+  services: { name: string; priceCents: number; durationMinutes: number; coveredBySubscription?: boolean }[];
   payment:
     | {
         status: 'PAID';

@@ -5,6 +5,7 @@ import { PagarmeClient } from './pagarme.client';
 import { pagarmeConfig } from './pagarme.config';
 import { PagarmePaymentsService } from './pagarme-payments.service';
 import { PagarmeRecipientService } from './pagarme-recipient.service';
+import { PagarmeSubscriptionsService } from './pagarme-subscriptions.service';
 
 interface WebhookBody {
   id?: string;
@@ -39,6 +40,7 @@ export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
     private client: PagarmeClient,
     private payments: PagarmePaymentsService,
     private recipients: PagarmeRecipientService,
+    private subscriptions: PagarmeSubscriptionsService,
   ) {}
 
   onModuleInit() {
@@ -46,7 +48,10 @@ export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
     this.sweeper = setInterval(() => this.sweep().catch(() => undefined), SWEEP_EVERY_MS);
     this.sweeper.unref();
     // Pagamentos em aberto são conferidos na API mesmo sem webhook (aviso perdido ou não cadastrado)
-    this.reconciler = setInterval(() => this.payments.reconcilePending().catch(() => undefined), RECONCILE_EVERY_MS);
+    this.reconciler = setInterval(() => {
+      this.payments.reconcilePending().catch(() => undefined);
+      this.subscriptions.reconcile().catch(() => undefined);
+    }, RECONCILE_EVERY_MS);
     this.reconciler.unref();
   }
 
@@ -149,7 +154,16 @@ export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
       await this.recipients.applyRemote(await this.client.getRecipient(data.id));
       return;
     }
-    // subscription.* e invoice.*: planos mensais entram na próxima etapa
+    if (type.startsWith('subscription.')) {
+      if (!data.id) return;
+      await this.subscriptions.applyRemote(await this.client.getSubscription(data.id));
+      return;
+    }
+    if (type.startsWith('invoice.')) {
+      if (!data.id) return;
+      await this.subscriptions.applyInvoice(await this.client.getInvoice(data.id));
+      return;
+    }
   }
 
   private async belongsToUs(type: string, data: WebhookBody['data']): Promise<boolean> {
@@ -157,10 +171,15 @@ export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
     const sources = [data?.metadata?.source, data?.order?.metadata?.source, data?.charge?.metadata?.source, data?.subscription?.metadata?.source];
     if (sources.includes(tag)) return true;
 
-    const ids = [data?.id, data?.order?.id, data?.charge?.id, data?.charge?.order?.id].filter((v): v is string => Boolean(v));
+    const ids = [data?.id, data?.order?.id, data?.charge?.id, data?.charge?.order?.id, data?.subscription?.id].filter((v): v is string =>
+      Boolean(v),
+    );
     if (ids.length === 0) return false;
     if (type.startsWith('recipient.')) {
       return (await this.prisma.paymentRecipient.count({ where: { pagarmeRecipientId: { in: ids } } })) > 0;
+    }
+    if (type.startsWith('subscription.') || type.startsWith('invoice.')) {
+      return (await this.prisma.customerSubscription.count({ where: { pagarmeSubscriptionId: { in: ids } } })) > 0;
     }
     return (
       (await this.prisma.payment.count({

@@ -6,6 +6,8 @@ import { PagarmeClient, PagarmeCharge, PagarmeOrder } from '../src/modules/pagar
 import { PagarmeRecipientService } from '../src/modules/pagarme/pagarme-recipient.service';
 import { PagarmePaymentsService } from '../src/modules/pagarme/pagarme-payments.service';
 import { PagarmeWebhookService } from '../src/modules/pagarme/pagarme-webhook.service';
+import { PagarmeSubscriptionsService } from '../src/modules/pagarme/pagarme-subscriptions.service';
+import { parseOnlineFees } from '@autowash/shared';
 import { buildSplit } from '../src/modules/pagarme/split-builder';
 
 /** Pagar.me de mentira: guarda o que foi enviado e responde como a API v5 */
@@ -66,6 +68,7 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
   let prisma: PrismaService;
   let payments: PagarmePaymentsService;
   let webhooks: PagarmeWebhookService;
+  let feeRates: jest.SpyInstance;
   const fake = new FakePagarme();
   const created = { appointments: [] as string[], recipient: '' };
   let userId: string;
@@ -102,11 +105,20 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
       PAGARME_WEBHOOK_USER: '',
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PrismaService, PagarmeRecipientService, PagarmePaymentsService, PagarmeWebhookService, { provide: PagarmeClient, useValue: fake }],
+      providers: [
+        PrismaService,
+        PagarmeRecipientService,
+        PagarmePaymentsService,
+        PagarmeSubscriptionsService,
+        PagarmeWebhookService,
+        { provide: PagarmeClient, useValue: fake },
+      ],
     }).compile();
     prisma = module.get(PrismaService);
     payments = module.get(PagarmePaymentsService);
     webhooks = module.get(PagarmeWebhookService);
+    // Taxas fixas no teste (sem taxa): não dependem do que outro teste grava nas configurações
+    feeRates = jest.spyOn(payments, 'feeRates').mockResolvedValue(parseOnlineFees(null));
 
     // Cliente com CPF, celular e e-mail (exigidos para pagar online)
     const user = await prisma.user.create({
@@ -132,6 +144,9 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
       },
     });
     created.recipient = recipient.id;
+    // Outros testes rodam em paralelo no mesmo banco: este usa sempre o próprio recebedor
+    const recipients = module.get(PagarmeRecipientService);
+    jest.spyOn(recipients, 'current').mockImplementation(() => prisma.paymentRecipient.findUnique({ where: { id: created.recipient } }));
   });
 
   afterAll(async () => {
@@ -259,6 +274,35 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     } finally {
       process.env.PAGARME_FALLBACK_TO_PLATFORM = '';
       await prisma.paymentRecipient.update({ where: { id: created.recipient }, data: { status: 'active' } });
+    }
+  });
+
+  it('9. Taxa repassada: Pix e cartão parcelado cobram a taxa do cliente em item separado; parcelas limitadas', async () => {
+    const rates = parseOnlineFees(
+      JSON.stringify({ pixPercentBp: 119, cardFixedCents: 50, cardPercentBp: [499, 599, 699], maxInstallments: 2 }),
+    );
+    feeRates.mockResolvedValue(rates);
+    try {
+      const config = await payments.onlineConfig();
+      expect(config).toMatchObject({ maxInstallments: 2, fees: { pixPercentBp: 119, cardFixedCents: 50 } });
+
+      const a = await newAppointment(`TST-FEE-${Date.now() % 100000}`);
+      const pix = await payments.createPix(userId, a.id);
+      const pixBody = fake.orders.at(-1)! as { items: { amount: number; description: string }[] };
+      expect(pixBody.items.map((i) => i.amount)).toEqual([7000, pix.amountCents - 7000]);
+      expect(pixBody.items[1].description).toBe('Taxa do pagamento online');
+      expect(pix).toMatchObject({ customerFeeCents: pix.amountCents - 7000, installments: 1 });
+      expect(pix.amountCents).toBe(Math.ceil(7000 / (1 - 0.0119)));
+
+      // Pediu 3x, o dono aceita até 2x: cobra em 2x com a taxa de 2x
+      const b = await newAppointment(`TST-FEE2-${Date.now() % 100000}`);
+      fake.nextCardStatus = 'paid';
+      const card = await payments.createCard(userId, b.id, { cardToken: 'token_fee', installments: 3 });
+      const cardBody = fake.orders.at(-1)! as { payments: { credit_card: { installments: number } }[] };
+      expect(cardBody.payments[0].credit_card.installments).toBe(2);
+      expect(card).toMatchObject({ status: 'PAID', installments: 2, amountCents: Math.ceil((7000 + 50) / (1 - 0.0599)) });
+    } finally {
+      feeRates.mockResolvedValue(parseOnlineFees(null));
     }
   });
 });

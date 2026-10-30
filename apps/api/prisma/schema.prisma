@@ -52,12 +52,13 @@ model User {
   addresses          Address[]
   vehicles           Vehicle[]
   appointments       Appointment[]
-  assignedWorkOrders WorkOrder[]        @relation("TechnicianWorkOrders")
-  uploadedMedia      MediaAsset[]       @relation("UserUploadedMedia")
+  assignedWorkOrders WorkOrder[]            @relation("TechnicianWorkOrders")
+  uploadedMedia      MediaAsset[]           @relation("UserUploadedMedia")
   orders             Order[]
   couponRedemptions  CouponRedemption[]
   auditLogs          AuditLog[]
   legalAcceptances   LegalAcceptance[]
+  subscriptions      CustomerSubscription[]
 
   @@index([status])
   @@map("users")
@@ -168,9 +169,10 @@ model Vehicle {
   createdAt    DateTime            @default(now()) @map("created_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
-  workOrders   WorkOrder[]
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  workOrders    WorkOrder[]
+  subscriptions CustomerSubscription[]
 
   @@index([userId])
   @@index([plate])
@@ -199,6 +201,10 @@ model BusinessSettings {
   // Número do WhatsApp do estabelecimento conectado ao serviço de mensagens
   whatsappStatus           WhatsAppConnectionStatus @default(DISCONNECTED) @map("whatsapp_status")
   whatsappStatusAt         DateTime?                @map("whatsapp_status_at")
+  // Taxas do Pagar.me repassadas ao cliente e parcelas aceitas (JSON, ver OnlineFeeRates)
+  onlineFeesJson           String?                  @map("online_fees_json") @db.Text
+  // Assinaturas: só aparecem no painel quando o dono libera; o site nunca divulga
+  subscriptionsEnabled     Boolean                  @default(false) @map("subscriptions_enabled")
   createdAt                DateTime                 @default(now()) @map("created_at")
   updatedAt                DateTime                 @updatedAt @map("updated_at")
 
@@ -288,9 +294,10 @@ model Service {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  category            ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category            ServiceCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   priceRules          ServicePriceRule[]
   appointmentServices AppointmentService[]
+  subscriptionPlans   SubscriptionPlanService[]
 
   @@index([categoryId])
   @@map("services")
@@ -343,40 +350,44 @@ enum AppointmentSource {
 }
 
 model Appointment {
-  id                      String              @id @default(uuid())
-  readableCode            String              @unique @map("readable_code") @db.VarChar(20) // Ex: S85-7F3A2C
+  id                       String              @id @default(uuid())
+  readableCode             String              @unique @map("readable_code") @db.VarChar(20) // Ex: S85-7F3A2C
   // Nulos apenas em atendimentos de balcão (WALK_IN), sem conta vinculada
-  userId                  String?             @map("user_id")
-  vehicleId               String?             @map("vehicle_id")
-  source                  AppointmentSource   @default(APP)
+  userId                   String?             @map("user_id")
+  vehicleId                String?             @map("vehicle_id")
+  source                   AppointmentSource   @default(APP)
   // Snapshot do cliente e do veículo no momento do agendamento
-  customerName            String              @map("customer_name") @db.VarChar(120)
-  customerPhone           String?             @map("customer_phone") @db.VarChar(20)
-  vehiclePlate            String?             @map("vehicle_plate") @db.VarChar(10)
-  vehicleLabel            String              @map("vehicle_label") @db.VarChar(160)
-  vehicleSize             VehicleSizeCategory @map("vehicle_size")
-  startsAt                DateTime            @map("starts_at")
-  endsAt                  DateTime            @map("ends_at")
-  status                  AppointmentStatus   @default(CONFIRMED)
-  totalPriceCents         Int                 @map("total_price_cents")
-  priceSnapshotJson       String              @map("price_snapshot_json") @db.Text // Imutabilidade de preços passados
-  cancellationPolicyVer   String              @default("1.0") @map("cancellation_policy_version") @db.VarChar(10)
+  customerName             String              @map("customer_name") @db.VarChar(120)
+  customerPhone            String?             @map("customer_phone") @db.VarChar(20)
+  vehiclePlate             String?             @map("vehicle_plate") @db.VarChar(10)
+  vehicleLabel             String              @map("vehicle_label") @db.VarChar(160)
+  vehicleSize              VehicleSizeCategory @map("vehicle_size")
+  startsAt                 DateTime            @map("starts_at")
+  endsAt                   DateTime            @map("ends_at")
+  status                   AppointmentStatus   @default(CONFIRMED)
+  totalPriceCents          Int                 @map("total_price_cents")
+  priceSnapshotJson        String              @map("price_snapshot_json") @db.Text // Imutabilidade de preços passados
+  cancellationPolicyVer    String              @default("1.0") @map("cancellation_policy_version") @db.VarChar(10)
   // Telebusca (Leva-e-Traz)
-  isTelebusca             Boolean             @default(false) @map("is_telebusca")
-  telebuscaFeeCents       Int                 @default(0) @map("telebusca_fee_cents")
-  pickupAddressId         String?             @map("pickup_address_id")
-  pickupAddressSnapshot   String?             @map("pickup_address_snapshot") @db.Text
-  deliveryAddressSnapshot String?             @map("delivery_address_snapshot") @db.Text
-  telebuscaStatus         TelebuscaStatus?    @map("telebusca_status")
-  clientNotes             String?             @map("client_notes") @db.Text
-  cancelledAt             DateTime?           @map("cancelled_at")
-  cancellationReason      String?             @map("cancellation_reason") @db.VarChar(255)
-  createdAt               DateTime            @default(now()) @map("created_at")
-  updatedAt               DateTime            @updatedAt @map("updated_at")
+  isTelebusca              Boolean             @default(false) @map("is_telebusca")
+  telebuscaFeeCents        Int                 @default(0) @map("telebusca_fee_cents")
+  pickupAddressId          String?             @map("pickup_address_id")
+  pickupAddressSnapshot    String?             @map("pickup_address_snapshot") @db.Text
+  deliveryAddressSnapshot  String?             @map("delivery_address_snapshot") @db.Text
+  telebuscaStatus          TelebuscaStatus?    @map("telebusca_status")
+  clientNotes              String?             @map("client_notes") @db.Text
+  cancelledAt              DateTime?           @map("cancelled_at")
+  cancellationReason       String?             @map("cancellation_reason") @db.VarChar(255)
+  // Lavagem usada da assinatura: serviços cobertos saem do total
+  subscriptionId           String?             @map("subscription_id")
+  subscriptionCoveredCents Int                 @default(0) @map("subscription_covered_cents")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
 
-  user             User?                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  vehicle          Vehicle?             @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  pickupAddress    Address?             @relation(fields: [pickupAddressId], references: [id], onDelete: SetNull)
+  user             User?                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  vehicle          Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  pickupAddress    Address?              @relation(fields: [pickupAddressId], references: [id], onDelete: SetNull)
+  subscription     CustomerSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   services         AppointmentService[]
   workOrder        WorkOrder?
   mediaAssets      MediaAsset[]
@@ -387,17 +398,19 @@ model Appointment {
   @@index([vehicleId])
   @@index([startsAt, endsAt])
   @@index([status])
+  @@index([subscriptionId])
   @@map("appointments")
 }
 
 model AppointmentService {
-  id                  String @id @default(uuid())
-  appointmentId       String @map("appointment_id")
-  serviceId           String @map("service_id")
-  serviceNameSnapshot String @map("service_name_snapshot") @db.VarChar(100)
-  unitPriceCents      Int    @map("unit_price_cents")
-  durationMinutes     Int    @map("duration_minutes")
-  quantity            Int    @default(1)
+  id                    String  @id @default(uuid())
+  appointmentId         String  @map("appointment_id")
+  serviceId             String  @map("service_id")
+  serviceNameSnapshot   String  @map("service_name_snapshot") @db.VarChar(100)
+  unitPriceCents        Int     @map("unit_price_cents")
+  durationMinutes       Int     @map("duration_minutes")
+  quantity              Int     @default(1)
+  coveredBySubscription Boolean @default(false) @map("covered_by_subscription")
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   service     Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
@@ -559,6 +572,7 @@ model Order {
   id                String      @id @default(uuid())
   appointmentId     String?     @unique @map("appointment_id")
   workOrderId       String?     @unique @map("work_order_id")
+  subscriptionId    String?     @map("subscription_id")
   // Nulo para clientes de balcão (sem conta no app)
   userId            String?     @map("user_id")
   status            OrderStatus @default(PENDING)
@@ -571,13 +585,15 @@ model Order {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  appointment       Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  workOrder         WorkOrder?         @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
-  user              User?              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  appointment       Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  workOrder         WorkOrder?            @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  subscription      CustomerSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   payments          Payment[]
   couponRedemptions CouponRedemption[]
 
   @@index([userId])
+  @@index([subscriptionId])
   @@map("orders")
 }
 
@@ -624,6 +640,11 @@ model Payment {
   receiptUploadedAt     DateTime?       @map("receipt_uploaded_at")
   // Pagamento online (Pagar.me): pedido e cobrança (providerTransactionId = charge_id) com split
   externalOrderId       String?         @map("external_order_id") @db.VarChar(64)
+  // Fatura do Pagar.me quando o pagamento é a mensalidade de uma assinatura
+  externalInvoiceId     String?         @unique @map("external_invoice_id") @db.VarChar(64)
+  // Parte do valor que cobre a taxa do Pagar.me (paga pelo cliente, não é receita do lava-jato)
+  customerFeeCents      Int             @default(0) @map("customer_fee_cents")
+  installments          Int             @default(1)
   platformFeePercent    Int?            @map("platform_fee_percent")
   platformFeeCents      Int?            @map("platform_fee_cents")
   recipientCents        Int?            @map("recipient_cents")
@@ -904,4 +925,97 @@ model WhatsAppMessage {
   @@index([appointmentId])
   @@index([createdAt])
   @@map("whatsapp_messages")
+}
+
+// -----------------------------------------------------------------------------
+// Assinaturas (planos mensais montados pelo dono, cobrados no cartão pelo Pagar.me)
+// -----------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  PENDING_CARD // Ativada pelo dono; o cliente ainda não cadastrou o cartão (ou a 1ª cobrança não passou)
+  ACTIVE // Pagar.me cobrando todo mês; cobre as lavagens do período pago
+  CANCELED
+}
+
+model SubscriptionPlan {
+  id             String   @id @default(uuid())
+  name           String   @db.VarChar(80)
+  description    String?  @db.VarChar(255)
+  washesPerMonth Int      @map("washes_per_month")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  services      SubscriptionPlanService[]
+  prices        SubscriptionPlanPrice[]
+  subscriptions CustomerSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model SubscriptionPlanService {
+  planId    String @map("plan_id")
+  serviceId String @map("service_id")
+
+  plan    SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@id([planId, serviceId])
+  @@index([serviceId])
+  @@map("subscription_plan_services")
+}
+
+model SubscriptionPlanPrice {
+  id           String              @id @default(uuid())
+  planId       String              @map("plan_id")
+  sizeCategory VehicleSizeCategory @map("size_category")
+  priceCents   Int                 @map("price_cents")
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, sizeCategory])
+  @@map("subscription_plan_prices")
+}
+
+model CustomerSubscription {
+  id                    String              @id @default(uuid())
+  planId                String              @map("plan_id")
+  userId                String              @map("user_id")
+  vehicleId             String              @map("vehicle_id")
+  status                SubscriptionStatus  @default(PENDING_CARD)
+  // Regras congeladas na ativação: mudar o plano depois não altera quem já assina
+  planNameSnapshot      String              @map("plan_name_snapshot") @db.VarChar(80)
+  washesPerMonth        Int                 @map("washes_per_month")
+  serviceIdsJson        String              @map("service_ids_json") @db.Text
+  sizeCategory          VehicleSizeCategory @map("size_category")
+  priceCents            Int                 @map("price_cents") // Mensalidade do plano
+  customerFeeCents      Int                 @default(0) @map("customer_fee_cents") // Taxa do cartão repassada
+  chargedCents          Int                 @map("charged_cents") // Cobrado por mês
+  platformFeePercent    Int                 @map("platform_fee_percent")
+  // Link enviado ao cliente para cadastrar o cartão (só o hash fica no banco)
+  setupTokenHash        String?             @unique @map("setup_token_hash") @db.VarChar(64)
+  setupTokenExpiresAt   DateTime?           @map("setup_token_expires_at")
+  pagarmeSubscriptionId String?             @unique @map("pagarme_subscription_id") @db.VarChar(64)
+  cardBrand             String?             @map("card_brand") @db.VarChar(30)
+  cardLast4             String?             @map("card_last4") @db.VarChar(4)
+  // Período já pago: as lavagens só são cobertas dentro dele
+  currentPeriodStart    DateTime?           @map("current_period_start")
+  currentPeriodEnd      DateTime?           @map("current_period_end")
+  lastError             String?             @map("last_error") @db.VarChar(255)
+  lastSyncedAt          DateTime?           @map("last_synced_at")
+  canceledAt            DateTime?           @map("canceled_at")
+  cancelReason          String?             @map("cancel_reason") @db.VarChar(200)
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  appointments Appointment[]
+  orders       Order[]
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@index([status])
+  @@map("customer_subscriptions")
 }

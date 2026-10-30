@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Save } from 'lucide-react';
+import { OnlineFeeRates, cardCharge, pixCharge } from '@autowash/shared';
 import { api } from '../lib/api';
+import { centsToInput, formatPrice, parsePriceInput } from '../lib/format';
 import { WhatsAppSettings } from '../components/WhatsAppSettings';
 
 interface AdminSettings {
@@ -10,6 +12,41 @@ interface AdminSettings {
   telebuscaEnabled: boolean;
   telebuscaFeeCents: number;
   cancellationLimitHours: number;
+  subscriptionsEnabled: boolean;
+  onlineFees: OnlineFeeRates;
+}
+
+// Percentual e valor fixo digitados como "4,99": 4,99% = 499 centésimos; R$ 0,50 = 50 centavos
+const toInput = (value: number) => centsToInput(value);
+const fromInput = (value: string) => parsePriceInput(value) ?? 0;
+const EXAMPLE_CENTS = 6000;
+
+interface FeeForm {
+  pixPercent: string;
+  pixFixed: string;
+  cardFixed: string;
+  cardPercents: string[];
+  maxInstallments: number;
+}
+
+function feeFormOf(rates: OnlineFeeRates): FeeForm {
+  return {
+    pixPercent: toInput(rates.pixPercentBp),
+    pixFixed: toInput(rates.pixFixedCents),
+    cardFixed: toInput(rates.cardFixedCents),
+    cardPercents: rates.cardPercentBp.map(toInput),
+    maxInstallments: rates.maxInstallments,
+  };
+}
+
+function ratesOfForm(form: FeeForm): OnlineFeeRates {
+  return {
+    pixPercentBp: fromInput(form.pixPercent),
+    pixFixedCents: fromInput(form.pixFixed),
+    cardFixedCents: fromInput(form.cardFixed),
+    cardPercentBp: form.cardPercents.map(fromInput),
+    maxInstallments: form.maxInstallments,
+  };
 }
 
 export default function AdminSettingsPage() {
@@ -24,6 +61,8 @@ export default function AdminSettingsPage() {
   const [telebuscaEnabled, setTelebuscaEnabled] = useState(false);
   const [telebuscaFee, setTelebuscaFee] = useState('0,00');
   const [cancellationHours, setCancellationHours] = useState('4');
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
+  const [fees, setFees] = useState<FeeForm | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -33,6 +72,8 @@ export default function AdminSettingsPage() {
     setTelebuscaEnabled(data.telebuscaEnabled);
     setTelebuscaFee((data.telebuscaFeeCents / 100).toFixed(2).replace('.', ','));
     setCancellationHours(String(data.cancellationLimitHours));
+    setSubscriptionsEnabled(data.subscriptionsEnabled);
+    setFees(feeFormOf(data.onlineFees));
   }, [data]);
 
   const save = useMutation({
@@ -45,11 +86,14 @@ export default function AdminSettingsPage() {
           telebuscaEnabled,
           telebuscaFeeCents: Math.round(parseFloat(telebuscaFee.replace(',', '.') || '0') * 100),
           cancellationLimitHours: Number(cancellationHours) || 4,
+          subscriptionsEnabled,
+          ...(fees ? { onlineFees: ratesOfForm(fees) } : {}),
         },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
       queryClient.invalidateQueries({ queryKey: ['settings', 'public'] });
+      queryClient.invalidateQueries({ queryKey: ['payments-online-config'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     },
@@ -60,7 +104,7 @@ export default function AdminSettingsPage() {
       <header>
         <p className="eyebrow">Configuração</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Configurações</h1>
-        <p className="mt-1 text-sm text-ink-muted">Dados do estabelecimento, Telebusca e regra de cancelamento.</p>
+        <p className="mt-1 text-sm text-ink-muted">Dados do estabelecimento, Telebusca, pagamento online, assinaturas e regra de cancelamento.</p>
       </header>
 
       {saved && (
@@ -152,6 +196,30 @@ export default function AdminSettingsPage() {
             </div>
           </section>
 
+          {fees && <OnlineFeesSection fees={fees} onChange={setFees} />}
+
+          <section className="card space-y-4 p-5" aria-labelledby="sec-subs">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="sec-subs" className="font-bold text-ink">Assinaturas</h2>
+                <p className="text-sm text-ink-muted">
+                  Liberadas, aparece o menu Assinaturas no painel para você montar os planos e ativar para os clientes. O site não
+                  divulga nada: só quem recebe o seu link fica sabendo. Desligar não cancela quem já assina.
+                </p>
+              </div>
+              <label className="flex flex-shrink-0 items-center gap-2 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={subscriptionsEnabled}
+                  onChange={(e) => setSubscriptionsEnabled(e.target.checked)}
+                  className="h-5 w-5 accent-amber-500"
+                />
+                Liberadas
+              </label>
+            </div>
+          </section>
+
           <div className="flex justify-end">
             <button type="submit" disabled={save.isPending} className="btn-primary">
               <Save className="h-4 w-4" aria-hidden="true" />
@@ -163,5 +231,87 @@ export default function AdminSettingsPage() {
 
       <WhatsAppSettings />
     </div>
+  );
+}
+
+/** Taxas do contrato com o Pagar.me: o cliente paga a taxa e o valor do serviço chega inteiro */
+function OnlineFeesSection({ fees, onChange }: { fees: FeeForm; onChange: (fees: FeeForm) => void }) {
+  const rates = ratesOfForm(fees);
+  const pix = pixCharge(EXAMPLE_CENTS, rates);
+  const card1 = cardCharge(EXAMPLE_CENTS, 1, rates);
+  const cardMax = cardCharge(EXAMPLE_CENTS, fees.maxInstallments, rates);
+  const setPercent = (index: number, value: string) => onChange({ ...fees, cardPercents: fees.cardPercents.map((p, i) => (i === index ? value : p)) });
+
+  return (
+    <section className="card space-y-4 p-5" aria-labelledby="sec-fees">
+      <div>
+        <h2 id="sec-fees" className="font-bold text-ink">Pagamento online: taxas e parcelas</h2>
+        <p className="text-sm text-ink-muted">
+          Informe as taxas do seu contrato com o Pagar.me (no painel deles, em Taxas). O cliente paga a taxa no pagamento online,
+          inclusive no cartão em 1x; quem paga na loja não paga taxa.
+        </p>
+      </div>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-ink">Pix</legend>
+        <div className="grid grid-cols-2 gap-3 sm:w-80">
+          <div>
+            <label htmlFor="fee-pix-pct" className="label">Taxa (%)</label>
+            <input id="fee-pix-pct" inputMode="decimal" value={fees.pixPercent} onChange={(e) => onChange({ ...fees, pixPercent: e.target.value })} className="field" />
+          </div>
+          <div>
+            <label htmlFor="fee-pix-fixed" className="label">Fixo por Pix (R$)</label>
+            <input id="fee-pix-fixed" inputMode="decimal" value={fees.pixFixed} onChange={(e) => onChange({ ...fees, pixFixed: e.target.value })} className="field" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold text-ink">Cartão de crédito</legend>
+        <div className="grid grid-cols-2 gap-3 sm:w-80">
+          <div>
+            <label htmlFor="fee-card-max" className="label">Parcelar em até</label>
+            <select
+              id="fee-card-max"
+              value={fees.maxInstallments}
+              onChange={(e) => onChange({ ...fees, maxInstallments: Number(e.target.value) })}
+              className="field"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? 'Só à vista (1x)' : `${n}x`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="fee-card-fixed" className="label">Fixo por cartão (R$)</label>
+            <input id="fee-card-fixed" inputMode="decimal" value={fees.cardFixed} onChange={(e) => onChange({ ...fees, cardFixed: e.target.value })} className="field" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {Array.from({ length: fees.maxInstallments }, (_, i) => (
+            <div key={i}>
+              <label htmlFor={`fee-card-${i + 1}`} className="label">
+                {i + 1}x (%)
+              </label>
+              <input id={`fee-card-${i + 1}`} inputMode="decimal" value={fees.cardPercents[i]} onChange={(e) => setPercent(i, e.target.value)} className="field" />
+            </div>
+          ))}
+        </div>
+      </fieldset>
+
+      <p className="rounded-xl bg-subtle p-3 text-sm text-ink-muted">
+        Exemplo, serviço de {formatPrice(EXAMPLE_CENTS)}: no Pix o cliente paga <strong className="text-ink">{formatPrice(pix.totalCents)}</strong>, no
+        cartão em 1x <strong className="text-ink">{formatPrice(card1.totalCents)}</strong>
+        {fees.maxInstallments > 1 && (
+          <>
+            {' '}
+            e em {fees.maxInstallments}x <strong className="text-ink">{formatPrice(cardMax.totalCents)}</strong>
+          </>
+        )}
+        . Descontada a taxa, chegam os {formatPrice(EXAMPLE_CENTS)}.
+      </p>
+    </section>
   );
 }

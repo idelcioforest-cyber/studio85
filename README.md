@@ -256,13 +256,17 @@ O pagamento online é **opcional**: o cliente paga agora pelo app (Pix ou cartã
 
 O checkout só aparece com as chaves configuradas e o recebedor do lava-jato **Liberado** no Pagar.me. Isso exige cadastro e verificação de identidade em Financeiro → Pagamentos online → Recebedor.
 
+Com `PAGARME_FALLBACK_TO_PLATFORM=true` (modo temporário), o checkout abre mesmo sem o recebedor do lava-jato: o valor cai inteiro na conta da plataforma, sem divisão. Quando o recebedor for liberado, a divisão volta sozinha.
+
+**Taxa paga pelo cliente:** em Configurações → Pagamento online, o dono informa as taxas do contrato com o Pagar.me (Pix e cartão por número de parcelas, percentual e fixo) e até quantas vezes aceita parcelar. No pagamento online o cliente paga o serviço mais a taxa, em item separado do pedido, inclusive no cartão em 1x; descontada a taxa, chega o preço do serviço. Na Receita a taxa não conta como faturamento.
+
 **Variáveis** (modelo em `infra/.env.example`):
 
 - `PAGARME_SECRET_KEY` e `PAGARME_PUBLIC_KEY`;
 - `PAGARME_PLATFORM_RECIPIENT_ID`, o recebedor da comissão;
 - `PAGARME_PLATFORM_FEE_PERCENT=2`;
 - `PAGARME_SOURCE_TAG=studio85`;
-- `PAGARME_MAX_INSTALLMENTS=1`;
+- `PAGARME_FALLBACK_TO_PLATFORM` (temporário, ver acima);
 - opcionais: `PAGARME_WEBHOOK_USER` e `PAGARME_WEBHOOK_PASS`, para Basic Auth no webhook.
 
 Na Hostinger elas ficam no painel do app e só valem depois do próximo build.
@@ -284,6 +288,11 @@ Na Hostinger elas ficam no painel do app e só valem depois do próximo build.
 | `GET admin/payments/webhook-events` | eventos recebidos |
 | `POST …/:id/reprocess` | reprocessa um evento |
 | `GET admin/revenue` | Receita: indicadores, demonstrativo, gráficos e comparação com o período anterior |
+| `GET/POST/PUT/DELETE admin/subscriptions/plans` | planos de assinatura montados pelo dono |
+| `GET/POST admin/subscriptions` | assinantes; ativar um plano para um veículo do cliente (gera o link do cartão) |
+| `POST admin/subscriptions/:id/link · cancel · refresh` | novo link do cartão, cancelar (para a recorrência), consultar o Pagar.me |
+| `GET/POST subscriptions/setup/:token` | página privada do link: o cliente cadastra o cartão e a recorrência começa |
+| `GET subscriptions/mine` | assinaturas ativas do cliente logado (vazio para quem não assina) |
 | `POST /api/webhook/pagarme` | webhook (endereço cadastrado no painel do Pagar.me) |
 
 **Webhook:** a conta é compartilhada com outros sistemas, então ele segue estas regras:
@@ -292,7 +301,16 @@ Na Hostinger elas ficam no painel do app e só valem depois do próximo build.
 - Cada `event_id` é processado uma vez só.
 - O recurso sempre é reconsultado na API antes de mudar o banco; o conteúdo do aviso nunca é usado como verdade.
 - Falhas são refeitas sozinhas até 5 vezes (30 s, 1 min, 2 min, 4 min), sem fila externa. A cada 5 min o sistema retoma eventos pendentes, inclusive depois de reiniciar.
-- Assinaturas (planos mensais) entram na próxima etapa.
+- Eventos `subscription.*` e `invoice.*` das assinaturas seguem as mesmas regras.
+- A cada 2 min o sistema também reconsulta os pagamentos em aberto e as assinaturas que podem ter mudado, então nada fica parado se um aviso se perder.
+
+**Assinaturas:** só existem no painel (Configurações → Assinaturas → Liberadas; o site não divulga).
+
+- O dono monta cada plano do zero: até 4 serviços do catálogo, lavagens por mês e preço mensal por porte.
+- Ele ativa o plano para um veículo do cliente e manda o link privado, que vale 7 dias. O cliente cadastra o cartão e o Pagar.me cobra todo mês, com a taxa do cartão por conta do cliente e a mesma divisão 98/2.
+- Cada mensalidade paga vira um pagamento no Caixa e na Receita (linha "Assinaturas").
+- Dentro do período pago, os serviços do plano saem do total ao agendar (app, balcão ou painel) até acabar a cota do mês. Cancelar a lavagem devolve a vaga.
+- As regras ficam congeladas na ativação: mudar o plano depois não altera quem já assina.
 
 **Testar com `sk_test_`:**
 

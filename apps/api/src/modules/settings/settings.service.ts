@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateBusinessSettingsInput } from '@autowash/shared';
+import { UpdateBusinessSettingsInput, parseOnlineFees } from '@autowash/shared';
 
 @Injectable()
 export class SettingsService {
@@ -50,7 +50,9 @@ export class SettingsService {
         },
       });
     }
-    return settings;
+    // As taxas do pagamento online vão para o painel já interpretadas
+    const { onlineFeesJson, ...rest } = settings;
+    return { ...rest, onlineFees: parseOnlineFees(onlineFeesJson) };
   }
 
   /**
@@ -72,13 +74,16 @@ export class SettingsService {
         ...(input.telebuscaFeeCents !== undefined ? { telebuscaFeeCents: input.telebuscaFeeCents } : {}),
         ...(input.cancellationLimitHours !== undefined ? { cancellationLimitHours: input.cancellationLimitHours } : {}),
         ...(input.simultaneousSlotsDefault !== undefined ? { simultaneousSlotsDefault: input.simultaneousSlotsDefault } : {}),
+        ...(input.subscriptionsEnabled !== undefined ? { subscriptionsEnabled: input.subscriptionsEnabled } : {}),
+        ...(input.onlineFees !== undefined ? { onlineFeesJson: JSON.stringify(input.onlineFees) } : {}),
       },
     });
 
+    const { onlineFeesJson, ...rest } = updated;
     return {
       success: true,
       message: 'Configurações atualizadas com sucesso.',
-      settings: updated,
+      settings: { ...rest, onlineFees: parseOnlineFees(onlineFeesJson) },
     };
   }
 }

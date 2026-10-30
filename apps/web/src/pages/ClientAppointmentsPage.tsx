@@ -43,6 +43,7 @@ export default function ClientAppointmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       queryClient.invalidateQueries({ queryKey: ['availability'] });
+      queryClient.invalidateQueries({ queryKey: ['subscriptions', 'mine'] });
     },
   });
 
@@ -144,7 +145,11 @@ function AppointmentCard({
   const [paying, setPaying] = useState(false);
   const when = formatDateTime(appointment.startsAt);
   const paid = appointment.payment.status === 'PAID';
-  const canPayOnline = Boolean(onlineConfig?.enabled) && !paid && ['CONFIRMED', 'CHECK_IN', 'IN_PROGRESS', 'READY'].includes(appointment.status);
+  const canPayOnline =
+    Boolean(onlineConfig?.enabled) &&
+    !paid &&
+    appointment.totalPriceCents > 0 &&
+    ['CONFIRMED', 'CHECK_IN', 'IN_PROGRESS', 'READY'].includes(appointment.status);
   const isActive = ACTIVE_STATUSES.includes(appointment.status);
   const currentStep = progressSteps.findIndex((s) => s.status === appointment.status);
 
@@ -167,6 +172,9 @@ function AppointmentCard({
           <p className="mt-1.5 text-lg font-extrabold text-ink">
             {formatPrice(appointment.payment.status === 'PAID' ? appointment.payment.amountCents : appointment.totalPriceCents)}
           </p>
+          {appointment.subscriptionCoveredCents > 0 && (
+            <p className="text-xs font-semibold text-success">{formatPrice(appointment.subscriptionCoveredCents)} pela assinatura</p>
+          )}
           {appointment.payment.status === 'PAID' && (
             <>
               <p className="text-xs font-semibold text-success">

@@ -29,6 +29,7 @@ interface Summary {
   refundedCents: number;
   netCents: number;
   platformCents: number;
+  customerFeesCents: number;
   washerCents: number;
   pending: { count: number; cents: number };
   chargebacks: { count: number; cents: number };
@@ -43,6 +44,9 @@ interface OnlinePaymentRow {
   platformFeePercent: number;
   platformCents: number;
   washerCents: number;
+  customerFeeCents: number;
+  installments: number;
+  isSubscription: boolean;
   paidAt: string | null;
   createdAt: string;
   failureReason: string | null;
@@ -181,6 +185,7 @@ export default function AdminPagamentosPage() {
             ['Líquido', formatPrice(summary.data.netCents)],
             ['Lava-jato', formatPrice(summary.data.washerCents)],
             [`Comissão da plataforma`, formatPrice(summary.data.platformCents)],
+            ['Taxas pagas pelos clientes', formatPrice(summary.data.customerFeesCents)],
             ['Aguardando pagamento', `${summary.data.pending.count} · ${formatPrice(summary.data.pending.cents)}`],
             ['Chargebacks', `${summary.data.chargebacks.count} · ${formatPrice(summary.data.chargebacks.cents)}`],
           ].map(([label, value]) => (
@@ -215,6 +220,7 @@ export default function AdminPagamentosPage() {
                         {when.date} · {when.time}
                       </span>
                     </div>
+                    {p.isSubscription && <p className="text-sm text-ink-muted">Mensalidade de assinatura</p>}
                     {p.appointment && (
                       <p className="text-sm text-ink-muted">
                         <span className="font-mono">{p.appointment.code}</span> · {p.appointment.customerName} · {p.appointment.vehicleLabel}{' '}
@@ -224,6 +230,8 @@ export default function AdminPagamentosPage() {
                     {['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED'].includes(p.status) && (
                       <p className="text-xs text-ink-muted">
                         Lava-jato {formatPrice(p.washerCents)} · comissão {formatPrice(p.platformCents)} ({p.platformFeePercent}%)
+                        {p.customerFeeCents > 0 && ` · taxa paga pelo cliente ${formatPrice(p.customerFeeCents)}`}
+                        {p.installments > 1 && ` · ${p.installments}x`}
                         {p.refundedCents > 0 && ` · estornado ${formatPrice(p.refundedCents)}`}
                       </p>
                     )}

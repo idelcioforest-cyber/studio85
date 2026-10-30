@@ -8,14 +8,14 @@ import {
 } from '@nestjs/common';
 import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import * as QRCode from 'qrcode';
-import { CardPaymentInput, RefundPaymentInput } from '@autowash/shared';
+import { CardPaymentInput, FeeCharge, OnlineFeeRates, RefundPaymentInput, cardCharge, parseOnlineFees, pixCharge } from '@autowash/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptSensitiveData } from '../../common/utils/crypto.util';
 import { addDays, toZonedDateString, zonedTimeToUtc } from '../../common/utils/timezone.util';
 import { PagarmeCharge, PagarmeClient, PagarmeError, PagarmeOrder } from './pagarme.client';
 import { pagarmeConfig } from './pagarme.config';
 import { PagarmeRecipientService } from './pagarme-recipient.service';
-import { buildSplit, platformShareCents } from './split-builder';
+import { buildSplit, customerFeeKept, platformShareCents } from './split-builder';
 
 const PIX_EXPIRES_IN_SECONDS = 1800;
 const SYNC_MIN_INTERVAL_MS = 5000;
@@ -48,11 +48,20 @@ export class PagarmePaymentsService {
   /** O site só mostra "Pagar agora" com Pagar.me configurado e o recebedor do lava-jato liberado */
   async onlineConfig() {
     const enabled = await this.recipients.isActive();
+    const { maxInstallments, ...fees } = await this.feeRates();
     return {
       enabled,
       publicKey: enabled ? pagarmeConfig.publicKey : null,
-      maxInstallments: pagarmeConfig.maxInstallments,
+      maxInstallments,
+      // Taxas repassadas ao cliente: o app mostra o total de cada opção antes de pagar
+      fees,
     };
+  }
+
+  /** Taxas do contrato com o Pagar.me informadas pelo dono (sem nada informado: sem taxa, só à vista) */
+  async feeRates(): Promise<OnlineFeeRates> {
+    const settings = await this.prisma.businessSettings.findFirst({ select: { onlineFeesJson: true } });
+    return parseOnlineFees(settings?.onlineFeesJson);
   }
 
   async createPix(userId: string, appointmentId: string) {
@@ -70,7 +79,8 @@ export class PagarmePaymentsService {
     });
     if (reusable) return this.view(reusable);
 
-    return this.createOnline(appointment, user, order, 'PIX', (split) => ({
+    const charge = pixCharge(appointment.totalPriceCents, await this.feeRates());
+    return this.createOnline(appointment, user, order, 'PIX', charge, 1, (split) => ({
       payment_method: 'pix',
       pix: { expires_in: PIX_EXPIRES_IN_SECONDS },
       ...(split ? { split } : {}),
@@ -79,8 +89,10 @@ export class PagarmePaymentsService {
 
   async createCard(userId: string, appointmentId: string, input: CardPaymentInput) {
     const { appointment, user, order } = await this.loadPayable(userId, appointmentId);
-    const installments = Math.min(input.installments, pagarmeConfig.maxInstallments);
-    return this.createOnline(appointment, user, order, 'CREDIT_CARD', (split) => ({
+    const rates = await this.feeRates();
+    const installments = Math.min(input.installments, rates.maxInstallments);
+    const charge = cardCharge(appointment.totalPriceCents, installments, rates);
+    return this.createOnline(appointment, user, order, 'CREDIT_CARD', charge, installments, (split) => ({
       payment_method: 'credit_card',
       credit_card: { installments, statement_descriptor: 'STUDIO85', card_token: input.cardToken },
       ...(split ? { split } : {}),
@@ -175,7 +187,8 @@ export class PagarmePaymentsService {
 
         const becamePaid = !SETTLED.includes(payment.status) && SETTLED.includes(next.status);
         const refundDelta = next.refundedCents - payment.refundedCents;
-        const label = `${payment.order.appointment?.readableCode ?? 'Online'} · Pagar.me ${payment.method === 'PIX' ? 'Pix' : 'cartão'}`;
+        const origin = payment.order.appointment?.readableCode ?? (payment.order.subscriptionId ? 'Assinatura' : 'Online');
+        const label = `${origin} · Pagar.me ${payment.method === 'PIX' ? 'Pix' : 'cartão'}`;
 
         const updated = await tx.payment.update({
           where: { id: payment.id },
@@ -260,11 +273,12 @@ export class PagarmePaymentsService {
     const range = this.range(from, to);
     const payments = await this.prisma.payment.findMany({
       where: { provider: 'PAGARME', createdAt: { gte: range.start, lt: range.end } },
-      select: { status: true, amountCents: true, refundedCents: true, platformFeePercent: true },
+      select: { status: true, amountCents: true, refundedCents: true, platformFeePercent: true, customerFeeCents: true },
     });
     let soldCents = 0;
     let refundedCents = 0;
     let platformCents = 0;
+    let customerFeesCents = 0;
     const pending = { count: 0, cents: 0 };
     const chargebacks = { count: 0, cents: 0 };
     for (const p of payments) {
@@ -277,6 +291,7 @@ export class PagarmePaymentsService {
       refundedCents += p.refundedCents;
       // Estorno desfaz o split na proporção: a comissão incide só sobre o que ficou
       platformCents += platformShareCents(p.amountCents - p.refundedCents, p.platformFeePercent ?? 0);
+      customerFeesCents += customerFeeKept(p);
       if (p.status === 'DISPUTED') {
         chargebacks.count++;
         chargebacks.cents += p.amountCents;
@@ -290,7 +305,9 @@ export class PagarmePaymentsService {
       refundedCents,
       netCents,
       platformCents,
-      washerCents: netCents - platformCents,
+      // Taxa do Pagar.me paga pelos clientes: o Pagar.me desconta, então não chega ao lava-jato
+      customerFeesCents,
+      washerCents: netCents - platformCents - customerFeesCents,
       pending,
       chargebacks,
     };
@@ -302,6 +319,8 @@ export class PagarmePaymentsService {
       status: p.status,
       method: p.method,
       amountCents: p.amountCents,
+      customerFeeCents: p.customerFeeCents,
+      installments: p.installments,
       refundedCents: p.refundedCents,
       paidAt: p.paidAt,
       failureReason: p.failureReason,
@@ -328,13 +347,17 @@ export class PagarmePaymentsService {
       amountCents: p.amountCents,
       refundedCents: p.refundedCents,
       platformFeePercent: fee,
+      customerFeeCents: p.customerFeeCents,
+      installments: p.installments,
       platformCents: SETTLED.includes(p.status) ? platformShareCents(net, fee) : 0,
-      washerCents: SETTLED.includes(p.status) ? net - platformShareCents(net, fee) : 0,
+      washerCents: SETTLED.includes(p.status) ? net - platformShareCents(net, fee) - customerFeeKept(p) : 0,
       paidAt: p.paidAt,
       createdAt: p.createdAt,
       failureReason: p.failureReason,
       card: p.cardLast4 ? { brand: p.cardBrand, last4: p.cardLast4 } : null,
       chargeId: p.providerTransactionId,
+      // Mensalidade de assinatura não tem agendamento
+      isSubscription: 'order' in p ? Boolean((p as PaymentWithAppointment).order.subscriptionId) : false,
       appointment: appointment
         ? {
             code: appointment.readableCode,
@@ -357,6 +380,7 @@ export class PagarmePaymentsService {
     });
     if (!appointment) throw new NotFoundException('Agendamento não encontrado.');
     if (!PAYABLE_STATUSES.includes(appointment.status)) throw new BadRequestException('Este agendamento não pode mais ser pago.');
+    if (appointment.totalPriceCents <= 0) throw new BadRequestException('Este agendamento não tem valor a pagar.');
     if (appointment.order?.payments.some((p) => ['PAID', 'PARTIALLY_REFUNDED'].includes(p.status))) {
       throw new ConflictException('Este agendamento já está pago.');
     }
@@ -392,13 +416,15 @@ export class PagarmePaymentsService {
     user: { name: string; email: string; cpf: string; phone: string },
     order: { id: string },
     method: 'PIX' | 'CREDIT_CARD',
+    price: FeeCharge,
+    installments: number,
     paymentFor: (split: ReturnType<typeof buildSplit> | undefined) => Record<string, unknown>,
   ) {
     const washer = await this.recipients.activeWasher();
     // Modo temporário sem recebedor do lava-jato: o valor todo fica na conta da plataforma, sem divisão
     const feePercent = washer ? this.recipients.feePercentFor(washer) : 100;
     const split = washer ? buildSplit(washer.pagarmeRecipientId!, pagarmeConfig.platformRecipientId, feePercent) : undefined;
-    const amount = appointment.totalPriceCents;
+    const amount = price.totalCents;
     const platformCents = platformShareCents(amount, feePercent);
 
     const payment = await this.prisma.payment.create({
@@ -411,6 +437,8 @@ export class PagarmePaymentsService {
         platformFeePercent: feePercent,
         platformFeeCents: platformCents,
         recipientCents: amount - platformCents,
+        customerFeeCents: price.feeCents,
+        installments,
       },
     });
 
@@ -425,7 +453,11 @@ export class PagarmePaymentsService {
         document_type: 'CPF',
         phones: { mobile_phone: { country_code: '55', area_code: user.phone.slice(0, 2), number: user.phone.slice(2) } },
       },
-      items: [{ amount, description: `${services} · ${appointment.vehicleLabel}`.slice(0, 250), quantity: 1, code: appointment.readableCode }],
+      items: [
+        { amount: price.baseCents, description: `${services} · ${appointment.vehicleLabel}`.slice(0, 250), quantity: 1, code: appointment.readableCode },
+        // Taxa do pagamento online, paga pelo cliente
+        ...(price.feeCents > 0 ? [{ amount: price.feeCents, description: 'Taxa do pagamento online', quantity: 1, code: 'TAXA' }] : []),
+      ],
       metadata: {
         source: pagarmeConfig.sourceTag,
         appointment_id: appointment.id,

@@ -49,6 +49,32 @@ export interface PagarmeRecipient {
   metadata?: Record<string, string>;
   kyc_details?: { status?: string; status_reason?: string };
 }
+export interface PagarmeCycle {
+  id?: string;
+  start_at?: string;
+  end_at?: string;
+  billing_at?: string;
+  status?: string;
+  cycle?: number;
+}
+export interface PagarmeSubscription {
+  id: string;
+  code?: string;
+  status: string; // active, canceled, future, failed
+  current_cycle?: PagarmeCycle;
+  next_billing_at?: string;
+  card?: { id?: string; brand?: string; last_four_digits?: string };
+  metadata?: Record<string, string>;
+}
+export interface PagarmeInvoice {
+  id: string;
+  status: string; // pending, paid, canceled, scheduled, failed
+  amount: number;
+  subscription?: { id: string; metadata?: Record<string, string> };
+  charge?: PagarmeCharge;
+  cycle?: PagarmeCycle;
+  created_at?: string;
+}
 export interface PagarmeKycLink {
   url: string;
   base64_qrcode?: string;
@@ -119,6 +145,24 @@ export class PagarmeClient {
   }
   getCharge(id: string) {
     return this.request<PagarmeCharge>('GET', `/charges/${encodeURIComponent(id)}`);
+  }
+  createSubscription(body: unknown) {
+    return this.request<PagarmeSubscription>('POST', '/subscriptions', body);
+  }
+  getSubscription(id: string) {
+    return this.request<PagarmeSubscription>('GET', `/subscriptions/${encodeURIComponent(id)}`);
+  }
+  /** Cancela a recorrência e as faturas ainda em aberto */
+  cancelSubscription(id: string) {
+    return this.request<PagarmeSubscription>('DELETE', `/subscriptions/${encodeURIComponent(id)}`, { cancel_pending_invoices: true });
+  }
+  getInvoice(id: string) {
+    return this.request<PagarmeInvoice>('GET', `/invoices/${encodeURIComponent(id)}`);
+  }
+  /** Últimas faturas da assinatura (rede de segurança quando um webhook se perde) */
+  async listInvoices(subscriptionId: string): Promise<PagarmeInvoice[]> {
+    const page = await this.request<{ data?: PagarmeInvoice[] }>('GET', `/invoices?subscription_id=${encodeURIComponent(subscriptionId)}&size=10`);
+    return page?.data ?? [];
   }
   /** Estorno total (sem valor) ou parcial (amount em centavos) */
   cancelCharge(id: string, amount?: number) {

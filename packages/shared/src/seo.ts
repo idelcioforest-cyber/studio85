@@ -54,6 +54,8 @@ const PRIVATE_TITLES: [RegExp, string][] = [
   [/^\/admin\/pagamentos/, 'Pagamentos online'],
   [/^\/admin\/receita/, 'Receita'],
   [/^\/admin\/configuracoes/, 'Configurações'],
+  [/^\/admin\/assinaturas/, 'Assinaturas'],
+  [/^\/assinatura\//, 'Cartão da assinatura'],
 ];
 
 /** Páginas que entram no sitemap */

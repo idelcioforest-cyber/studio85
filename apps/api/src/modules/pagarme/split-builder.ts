@@ -36,6 +36,12 @@ export function buildSplit(washerRecipientId: string, platformRecipientId: strin
   ];
 }
 
+/** Parte da taxa repassada ao cliente que continua no valor pago (o estorno devolve a taxa na mesma proporção) */
+export function customerFeeKept(p: { amountCents: number; refundedCents: number; customerFeeCents: number }): number {
+  if (!p.customerFeeCents || p.amountCents <= 0) return 0;
+  return Math.round((p.customerFeeCents * (p.amountCents - p.refundedCents)) / p.amountCents);
+}
+
 /** Parte da plataforma em centavos (o arredondamento fica com o lava-jato) */
 export function platformShareCents(amountCents: number, platformFeePercent: number): number {
   return Math.floor((amountCents * platformFeePercent) / 100);
