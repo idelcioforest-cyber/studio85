@@ -4,7 +4,7 @@ import * as path from 'path';
 import { createTransport, Transporter } from 'nodemailer';
 import type { Attachment } from 'nodemailer/lib/mailer';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AppointmentEmailData, EmailContent, LOGO_CID, ShopInfo, appointmentEmail, codeEmail } from './email-templates';
+import { AppointmentEmailData, AppointmentEmailKind, EmailContent, LOGO_CID, ShopInfo, appointmentEmail, codeEmail } from './email-templates';
 
 // apps/api/assets/email-logo.png (mesmo caminho a partir de src/ e de dist/)
 const LOGO_PATH = path.resolve(__dirname, '../../../assets/email-logo.png');
@@ -107,7 +107,7 @@ export class MailService {
   /** Agendamento confirmado ou carro pronto (este com as fotos de depois, se houver) */
   async sendAppointmentEmail(
     to: string,
-    kind: 'APPOINTMENT_CONFIRMED' | 'CAR_READY',
+    kind: AppointmentEmailKind,
     data: Omit<AppointmentEmailData, 'photoCids'>,
     photos: EmailPhoto[] = [],
   ): Promise<void> {
@@ -125,7 +125,8 @@ export class MailService {
       ...data,
       photoCids: photoAttachments.map((a) => a.cid!),
     });
-    await this.send(to, content, kind === 'CAR_READY' ? 'carro pronto' : 'agendamento confirmado', photoAttachments);
+    const label = { CAR_READY: 'carro pronto', APPOINTMENT_CONFIRMED: 'agendamento confirmado', APPOINTMENT_CANCELLED: 'agendamento desmarcado' }[kind];
+    await this.send(to, content, label, photoAttachments);
   }
 
   private async send(to: string, content: EmailContent, label: string, extra: Attachment[] = []): Promise<void> {

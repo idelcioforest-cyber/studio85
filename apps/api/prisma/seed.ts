@@ -369,6 +369,17 @@ Quando houver pagamento online:
       isActive: true,
       attachPhotos: true,
     },
+    {
+      key: 'APPOINTMENT_CANCELLED',
+      title: 'Agendamento desmarcado',
+      body: [
+        'Olá, {primeiro_nome}! Seu horário no {empresa} de {data} às {hora} ({servicos}) foi desmarcado.',
+        '',
+        'Para marcar outro horário, é só responder esta mensagem ou agendar pelo app.',
+      ].join('\n'),
+      isActive: true,
+      attachPhotos: false,
+    },
   ];
   for (const template of messageTemplates) {
     await prisma.messageTemplate.upsert({

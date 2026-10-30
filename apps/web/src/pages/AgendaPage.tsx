@@ -24,7 +24,7 @@ import {
 import { Appointment, Availability, OpeningHours, SlotStatus } from '../lib/types';
 
 const DAYS_SHOWN = 14;
-const shiftLabels: Record<string, string> = { MANHA: 'Manhã', TARDE: 'Tarde', NOITE: 'Noite' };
+const shiftLabels: Record<string, string> = { MANHA: 'Manhã', TARDE: 'Tarde', NOITE: 'Noite', EXTRA: 'Horário extra' };
 
 function currentShopTime(): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -38,7 +38,8 @@ function currentShopTime(): string {
 /** Dia aberto para agendamento: funciona nesse dia da semana, está no prazo e, se for hoje, o expediente não acabou */
 function isDayOpen(hours: OpeningHours, iso: string): boolean {
   if (iso < hours.today || iso > addDaysISO(hours.today, hours.bookingWindowDays)) return false;
-  const info = hours.days.find((d) => d.dayOfWeek === dayOfWeekISO(iso));
+  // Dia especial (horário extra ou fechamento) vale no lugar da grade semanal
+  const info = hours.specialDays?.find((d) => d.date === iso) ?? hours.days.find((d) => d.dayOfWeek === dayOfWeekISO(iso));
   if (!info?.isOpen) return false;
   if (iso === hours.today) {
     const lastEnd = info.periods[info.periods.length - 1]?.end;

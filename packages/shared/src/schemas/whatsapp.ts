@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MESSAGE_TEMPLATE_KEYS = ['APPOINTMENT_CONFIRMED', 'CAR_READY'] as const;
+export const MESSAGE_TEMPLATE_KEYS = ['APPOINTMENT_CONFIRMED', 'CAR_READY', 'APPOINTMENT_CANCELLED'] as const;
 export type MessageTemplateKey = (typeof MESSAGE_TEMPLATE_KEYS)[number];
 
 export const UpdateMessageTemplateSchema = z.object({

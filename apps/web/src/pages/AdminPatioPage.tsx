@@ -5,6 +5,7 @@ import { PaymentModal } from '../components/PaymentModal';
 import { WalkInModal } from '../components/WalkInModal';
 import { PhotosModal } from '../components/PhotosModal';
 import { GrantAccessModal } from '../components/GrantAccessModal';
+import { CancelAppointmentModal } from '../components/CancelAppointmentModal';
 import { api } from '../lib/api';
 import {
   formatDateLong,
@@ -41,6 +42,7 @@ export default function AdminPatioPage() {
   const [paying, setPaying] = useState<Appointment | null>(null);
   const [photosFor, setPhotosFor] = useState<Appointment | null>(null);
   const [accessFor, setAccessFor] = useState<Appointment | null>(null);
+  const [cancelling, setCancelling] = useState<Appointment | null>(null);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [notifyResult, setNotifyResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -202,6 +204,9 @@ export default function AdminPatioPage() {
                   <span className="font-mono">{a.code}</span>
                 </p>
                 {a.notes && <p className="text-sm text-ink-muted">Obs.: {a.notes}</p>}
+                {a.status === 'CANCELLED' && a.cancellationReason && (
+                  <p className="text-sm text-ink-muted">{a.cancellationReason}</p>
+                )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button type="button" onClick={() => setPhotosFor(a)} className="btn-secondary px-2.5 py-1.5 text-xs">
                     <Camera className="h-3.5 w-3.5" aria-hidden="true" />
@@ -241,6 +246,11 @@ export default function AdminPatioPage() {
                       Receber
                     </button>
                   )
+                )}
+                {['CONFIRMED', 'CHECK_IN'].includes(a.status) && a.payment.status !== 'PAID' && (
+                  <button type="button" disabled={busy} onClick={() => setCancelling(a)} className="btn-secondary px-3 py-2">
+                    Desmarcar
+                  </button>
                 )}
                 {a.status === 'CONFIRMED' && (
                   <button
@@ -286,6 +296,7 @@ export default function AdminPatioPage() {
       <PaymentModal appointment={paying} onClose={() => setPaying(null)} />
       <PhotosModal appointment={photosFor} onClose={() => setPhotosFor(null)} />
       <GrantAccessModal appointment={accessFor} onClose={() => setAccessFor(null)} />
+      <CancelAppointmentModal appointment={cancelling} onClose={() => setCancelling(null)} />
       <WalkInModal
         mode="booking"
         open={isBookingOpen}

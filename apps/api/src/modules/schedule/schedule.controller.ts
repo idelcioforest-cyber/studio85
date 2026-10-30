@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Body, Query, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ScheduleService } from './schedule.service';
 import {
@@ -6,6 +6,8 @@ import {
   AvailabilityQueryInput,
   UpdateScheduleSchema,
   UpdateScheduleInput,
+  ScheduleExceptionSchema,
+  ScheduleExceptionInput,
   UserRole,
 } from '@autowash/shared';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -66,5 +68,34 @@ export class ScheduleController {
     @Body(new ZodValidationPipe(UpdateScheduleSchema)) body: UpdateScheduleInput,
   ) {
     return this.scheduleService.updateWeek(body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Get('admin/schedule/exceptions')
+  @ApiOperation({ summary: 'Dias especiais (horários extras e fechamentos) de hoje em diante' })
+  async listExceptions() {
+    return this.scheduleService.listExceptions();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Post('admin/schedule/exceptions')
+  @ApiOperation({ summary: 'Abrir horário extra ou fechar dia/período numa data' })
+  async createException(
+    @Body(new ZodValidationPipe(ScheduleExceptionSchema)) body: ScheduleExceptionInput,
+  ) {
+    return this.scheduleService.createException(body);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @Delete('admin/schedule/exceptions/:id')
+  @ApiOperation({ summary: 'Remover dia especial (a data volta à grade semanal)' })
+  async deleteException(@Param('id', ParseUUIDPipe) id: string) {
+    return this.scheduleService.deleteException(id);
   }
 }

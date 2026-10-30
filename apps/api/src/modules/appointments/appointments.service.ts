@@ -10,6 +10,7 @@ import {
   WalkInAppointmentInput,
   PayAppointmentInput,
   AdminCreateAppointmentInput,
+  UpdateAppointmentStatusInput,
   cleanPlate,
 } from '@autowash/shared';
 import { zonedTimeToUtc, toZonedDateString, addDays } from '../../common/utils/timezone.util';
@@ -91,6 +92,8 @@ function toDto(a: AppointmentWithServices) {
     vehicleSize: a.vehicleSize,
     notes: a.clientNotes,
     cancelledAt: a.cancelledAt,
+    // Só a equipe vê o motivo (removido na lista do cliente)
+    cancellationReason: a.cancellationReason,
     services: a.services.map((s) => ({
       name: s.serviceNameSnapshot,
       priceCents: s.unitPriceCents,
@@ -255,9 +258,11 @@ export class AppointmentsService {
       take: 100,
     });
     // O motivo do ajuste é anotação interna do caixa: não aparece no app do cliente
-    return list.map(toDto).map((a) =>
-      a.payment.status === 'PAID' ? { ...a, payment: { ...a.payment, adjustmentReason: null } } : a,
-    );
+    return list.map(toDto).map((a) => ({
+      ...a,
+      cancellationReason: null,
+      payment: a.payment.status === 'PAID' ? { ...a.payment, adjustmentReason: null } : a.payment,
+    }));
   }
 
   async cancelMine(userId: string, id: string) {
@@ -310,20 +315,29 @@ export class AppointmentsService {
     return { date: day, appointments: list.map(toDto) };
   }
 
-  async adminUpdateStatus(id: string, status: AppointmentStatus) {
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+  async adminUpdateStatus(id: string, input: UpdateAppointmentStatusInput) {
+    const { status } = input;
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: { order: { include: { payments: { where: { status: 'PAID' } } } } },
+    });
     if (!appointment) throw new NotFoundException('Agendamento não encontrado.');
 
     if (!STATUS_FLOW[appointment.status].includes(status)) {
       throw new BadRequestException('Esta mudança de etapa não é permitida para o agendamento.');
     }
+    if (status === 'CANCELLED' && appointment.order?.payments.length) {
+      throw new BadRequestException('Este atendimento já foi pago. Desfaça o recebimento no Caixa antes de desmarcar.');
+    }
 
+    // Desmarcar libera a vaga na hora (cancelados não ocupam a agenda)
+    const reason = input.reason?.trim();
     const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
         status,
         ...(status === 'CANCELLED'
-          ? { cancelledAt: new Date(), cancellationReason: 'Cancelado pela equipe' }
+          ? { cancelledAt: new Date(), cancellationReason: `Desmarcado pela equipe${reason ? `: ${reason}` : ''}`.slice(0, 255) }
           : {}),
       },
       include: APPOINTMENT_INCLUDE,
@@ -331,8 +345,13 @@ export class AppointmentsService {
 
     // Carro pronto: avisa o cliente no WhatsApp (com as fotos de depois, se configurado)
     if (status === 'READY') this.notifications.notifyInBackground(id, 'CAR_READY');
+    if (status === 'CANCELLED' && input.notifyClient) this.notifications.notifyInBackground(id, 'APPOINTMENT_CANCELLED');
 
-    return { success: true, appointment: toDto(updated) };
+    return {
+      success: true,
+      message: status === 'CANCELLED' ? 'Agendamento desmarcado. O horário ficou livre na agenda.' : undefined,
+      appointment: toDto(updated),
+    };
   }
 
   /**

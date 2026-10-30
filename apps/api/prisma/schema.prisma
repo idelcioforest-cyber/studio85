@@ -237,6 +237,26 @@ model ScheduleShift {
   @@map("schedule_shifts")
 }
 
+enum ScheduleExceptionType {
+  OPEN   // horário extra num dia específico
+  CLOSED // fecha o dia inteiro (sem horário) ou só um período
+}
+
+// Dias especiais: valem só para a data indicada e prevalecem sobre a grade semanal
+model ScheduleException {
+  id        String                @id @default(uuid())
+  date      String                @db.VarChar(10) // AAAA-MM-DD no fuso da loja
+  type      ScheduleExceptionType
+  startTime String?               @map("start_time") @db.VarChar(5) // vazio em CLOSED = dia inteiro
+  endTime   String?               @map("end_time") @db.VarChar(5)
+  capacity  Int                   @default(1) // carros ao mesmo tempo (só OPEN)
+  note      String?               @db.VarChar(120)
+  createdAt DateTime              @default(now()) @map("created_at")
+
+  @@index([date])
+  @@map("schedule_exceptions")
+}
+
 // -----------------------------------------------------------------------------
 // 5. Catálogo de Serviços e Preços por Porte
 // -----------------------------------------------------------------------------

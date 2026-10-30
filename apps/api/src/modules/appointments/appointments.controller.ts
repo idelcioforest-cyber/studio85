@@ -93,7 +93,7 @@ export class AppointmentsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(UpdateAppointmentStatusSchema)) body: UpdateAppointmentStatusInput,
   ) {
-    return this.appointmentsService.adminUpdateStatus(id, body.status);
+    return this.appointmentsService.adminUpdateStatus(id, body);
   }
 
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)

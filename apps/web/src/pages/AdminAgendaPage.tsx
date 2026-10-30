@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save, Check, Sun, Sunset, Moon } from 'lucide-react';
 import { api } from '../lib/api';
+import { SpecialDays } from '../components/SpecialDays';
 
 interface ShiftConfig {
   shiftName: 'MANHA' | 'TARDE' | 'NOITE';
@@ -308,6 +309,8 @@ export default function AdminAgendaPage() {
           </section>
         </>
       )}
+
+      <SpecialDays />
     </div>
   );
 }

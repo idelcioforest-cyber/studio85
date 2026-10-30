@@ -181,68 +181,79 @@ export function codeEmail(
   };
 }
 
-export function appointmentEmail(
-  shop: ShopInfo,
-  kind: 'APPOINTMENT_CONFIRMED' | 'CAR_READY',
-  data: AppointmentEmailData,
-): EmailContent {
-  const ready = kind === 'CAR_READY';
-  const myAppointmentsUrl = `${shop.appUrl.replace(/\/$/, '')}/meus-agendamentos`;
+export type AppointmentEmailKind = 'APPOINTMENT_CONFIRMED' | 'CAR_READY' | 'APPOINTMENT_CANCELLED';
 
-  const title = ready ? 'Seu carro está pronto' : 'Agendamento confirmado';
-  const intro = ready
-    ? `O <strong>${escapeHtml(data.vehicle)}</strong> (${escapeHtml(data.plate)}) já está pronto e pode ser retirado.`
-    : `Seu horário está reservado. Confira os detalhes:`;
-  const rows: [string, string][] = ready
-    ? [
-        ['Serviços', data.services],
-        ['Total', data.total],
-        ['Código', data.code],
-      ]
-    : [
-        ['Data', data.date],
-        ['Horário', data.time],
-        ['Veículo', `${data.vehicle} · ${data.plate}`],
-        ['Serviços', data.services],
-        ['Total', data.total],
-        ['Código', data.code],
-      ];
+export function appointmentEmail(shop: ShopInfo, kind: AppointmentEmailKind, data: AppointmentEmailData): EmailContent {
+  const base = shop.appUrl.replace(/\/$/, '');
+  const myAppointmentsUrl = `${base}/meus-agendamentos`;
+  const vehicleLine = `${data.vehicle} · ${data.plate}`;
+
+  const copy = {
+    CAR_READY: {
+      title: 'Seu carro está pronto',
+      subject: `Seu ${data.vehicle} está pronto — ${shop.company}`,
+      preheader: `O ${data.vehicle} já pode ser retirado.`,
+      introHtml: `O <strong>${escapeHtml(data.vehicle)}</strong> (${escapeHtml(data.plate)}) já está pronto e pode ser retirado.`,
+      introText: `O ${data.vehicle} (${data.plate}) já está pronto e pode ser retirado.`,
+      rows: [['Serviços', data.services], ['Total', data.total], ['Código', data.code]] as [string, string][],
+      primary: { label: 'Como chegar', href: shop.mapsUrl },
+      secondary: { label: 'Ver no app', href: myAppointmentsUrl },
+      note: 'O pagamento é feito na retirada, por Pix, cartão ou dinheiro.',
+    },
+    APPOINTMENT_CONFIRMED: {
+      title: 'Agendamento confirmado',
+      subject: `Agendamento confirmado: ${data.date}, ${data.time} — ${shop.company}`,
+      preheader: `${data.date} às ${data.time} · ${data.services}`,
+      introHtml: 'Seu horário está reservado. Confira os detalhes:',
+      introText: 'Seu horário está reservado.',
+      rows: [['Data', data.date], ['Horário', data.time], ['Veículo', vehicleLine], ['Serviços', data.services], ['Total', data.total], ['Código', data.code]] as [string, string][],
+      primary: { label: 'Ver meu agendamento', href: myAppointmentsUrl },
+      secondary: { label: 'Como chegar', href: shop.mapsUrl },
+      note: 'Precisa remarcar ou cancelar? Faça pelo app ou fale com a gente pelo WhatsApp.',
+    },
+    APPOINTMENT_CANCELLED: {
+      title: 'Agendamento desmarcado',
+      subject: `Agendamento desmarcado: ${data.date}, ${data.time} — ${shop.company}`,
+      preheader: `O horário de ${data.date} às ${data.time} foi desmarcado.`,
+      introHtml: 'O horário abaixo foi desmarcado. Quando quiser, é só escolher outro:',
+      introText: 'O horário abaixo foi desmarcado. Quando quiser, é só escolher outro.',
+      rows: [['Data', data.date], ['Horário', data.time], ['Veículo', vehicleLine], ['Serviços', data.services], ['Código', data.code]] as [string, string][],
+      primary: { label: 'Agendar outro horário', href: `${base}/agenda` },
+      secondary: { label: 'Falar no WhatsApp', href: shop.whatsappUrl },
+      note: 'Se tiver alguma dúvida, fale com a gente pelo WhatsApp.',
+    },
+  }[kind];
 
   const content = [
     paragraph(`Olá, ${escapeHtml(data.firstName)}!`),
-    paragraph(intro),
-    details(rows),
-    ready ? photos(data.photoCids ?? []) : '',
+    paragraph(copy.introHtml),
+    details(copy.rows),
+    kind === 'CAR_READY' ? photos(data.photoCids ?? []) : '',
     `<div style="height:28px;line-height:28px;font-size:0">&nbsp;</div>`,
-    button(ready ? 'Como chegar' : 'Ver meu agendamento', ready ? shop.mapsUrl : myAppointmentsUrl),
+    button(copy.primary.label, copy.primary.href),
     `<p style="margin:16px 0 0;text-align:center;font-family:${FONT};font-size:14px">
-      <a href="${escapeHtml(ready ? myAppointmentsUrl : shop.mapsUrl)}" target="_blank" style="color:${COLORS.ink};font-weight:600;text-decoration:underline">${ready ? 'Ver no app' : 'Como chegar'}</a>
+      <a href="${escapeHtml(copy.secondary.href)}" target="_blank" style="color:${COLORS.ink};font-weight:600;text-decoration:underline">${escapeHtml(copy.secondary.label)}</a>
     </p>`,
-    note(
-      ready
-        ? 'O pagamento é feito na retirada, por Pix, cartão ou dinheiro.'
-        : 'Precisa remarcar ou cancelar? Faça pelo app ou fale com a gente pelo WhatsApp.',
-    ),
+    note(escapeHtml(copy.note)),
   ].join('\n');
 
-  const textRows = rows.map(([label, value]) => `${label}: ${value}`);
   return {
-    subject: ready ? `Seu ${data.vehicle} está pronto — ${shop.company}` : `Agendamento confirmado: ${data.date}, ${data.time} — ${shop.company}`,
+    subject: copy.subject,
     html: layout(shop, {
-      preheader: ready ? `O ${data.vehicle} já pode ser retirado.` : `${data.date} às ${data.time} · ${data.services}`,
-      title,
+      preheader: copy.preheader,
+      title: copy.title,
       content,
       reason: 'Você recebeu este e-mail porque tem um agendamento no Studio 85.',
     }),
     text: [
       `Olá, ${data.firstName}!`,
       '',
-      ready ? `O ${data.vehicle} (${data.plate}) já está pronto e pode ser retirado.` : 'Seu horário está reservado.',
+      copy.introText,
       '',
-      ...textRows,
+      ...copy.rows.map(([label, value]) => `${label}: ${value}`),
       '',
-      ready ? `Como chegar: ${shop.mapsUrl}` : `Ver meu agendamento: ${myAppointmentsUrl}`,
-      ready ? 'O pagamento é feito na retirada, por Pix, cartão ou dinheiro.' : 'Precisa remarcar ou cancelar? Faça pelo app ou fale com a gente pelo WhatsApp.',
+      `${copy.primary.label}: ${copy.primary.href}`,
+      copy.note,
       '',
       footerText(shop),
     ].join('\n'),

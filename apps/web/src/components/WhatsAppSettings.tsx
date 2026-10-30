@@ -12,7 +12,7 @@ interface Status {
 }
 
 interface Template {
-  key: 'APPOINTMENT_CONFIRMED' | 'CAR_READY';
+  key: 'APPOINTMENT_CONFIRMED' | 'CAR_READY' | 'APPOINTMENT_CANCELLED';
   title: string;
   body: string;
   isActive: boolean;

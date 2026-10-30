@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { OutboundMessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MessageTemplateKey, UpdateMessageTemplateInput } from '@autowash/shared';
@@ -28,11 +28,26 @@ const RETRY_DELAYS_MS = [0, 2000, 6000];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Mensagens criadas depois do primeiro seed: entram sozinhas no boot se ainda não existirem
+const LATER_TEMPLATES = [
+  {
+    key: 'APPOINTMENT_CANCELLED',
+    title: 'Agendamento desmarcado',
+    body: [
+      'Olá, {primeiro_nome}! Seu horário no {empresa} de {data} às {hora} ({servicos}) foi desmarcado.',
+      '',
+      'Para marcar outro horário, é só responder esta mensagem ou agendar pelo app.',
+    ].join('\n'),
+    isActive: true,
+    attachPhotos: false,
+  },
+];
+
 /**
  * Mensagens automáticas de WhatsApp (agendamento confirmado, carro pronto + fotos de depois)
  */
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
@@ -40,6 +55,14 @@ export class NotificationsService {
     private bridge: WhatsAppBridgeService,
     private mail: MailService,
   ) {}
+
+  async onModuleInit() {
+    for (const template of LATER_TEMPLATES) {
+      await this.prisma.messageTemplate
+        .upsert({ where: { key: template.key }, update: {}, create: template })
+        .catch((error) => this.logger.warn(`Mensagem ${template.key} não criada: ${(error as Error).message}`));
+    }
+  }
 
   render(body: string, values: Record<string, string>): string {
     return body.replace(/\{(\w+)\}/g, (match, key: string) => (key in values ? values[key] : match));

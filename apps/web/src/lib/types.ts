@@ -71,6 +71,7 @@ export interface Appointment {
   vehicleSize: VehicleSizeCategory;
   notes: string | null;
   cancelledAt: string | null;
+  cancellationReason?: string | null;
   services: { name: string; priceCents: number; durationMinutes: number }[];
   payment:
     | {
@@ -111,6 +112,8 @@ export interface OpeningHours {
   bookingWindowDays: number;
   today: string;
   days: { dayOfWeek: number; isOpen: boolean; periods: { start: string; end: string }[] }[];
+  // Datas com horário extra ou fechamento: valem no lugar da grade semanal
+  specialDays: { date: string; isOpen: boolean; periods: { start: string; end: string }[] }[];
 }
 
 export type SlotStatus = 'AVAILABLE' | 'LIMITED' | 'FULL';
@@ -120,7 +123,7 @@ export interface Availability {
   isOpen: boolean;
   freeTime: boolean;
   durationMinutes: number;
-  slots: { time: string; shift: 'MANHA' | 'TARDE' | 'NOITE'; status: SlotStatus }[];
+  slots: { time: string; shift: 'MANHA' | 'TARDE' | 'NOITE' | 'EXTRA'; status: SlotStatus }[];
 }
 
 export const statusLabels: Record<AppointmentStatus, string> = {

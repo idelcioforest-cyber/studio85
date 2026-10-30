@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateScheduleInput, VehicleSizeCategory } from '@autowash/shared';
+import { ScheduleExceptionInput, UpdateScheduleInput, VehicleSizeCategory } from '@autowash/shared';
 import { resolveSelectionPricing } from '../services/pricing.util';
 import {
   zonedTimeToUtc,
@@ -29,11 +29,26 @@ export const BOOKING_WINDOW_DAYS = 60;
 export const NON_BLOCKING_STATUSES: AppointmentStatus[] = ['CANCELLED', 'NO_SHOW'];
 
 const DAY_LABELS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+// Dias especiais podem ser marcados com até um ano de antecedência (ex.: feriados)
+const EXCEPTION_WINDOW_DAYS = 365;
+
+type OpenShift = { shiftName: string; start: number; end: number; capacity: number; tolerance: number };
 
 interface OpenDay {
   dayOfWeek: number;
   intervalMinutes: number;
-  shifts: { shiftName: string; start: number; end: number; capacity: number; tolerance: number }[];
+  shifts: OpenShift[];
+}
+
+/** Tira o período [start, end) dos turnos, dividindo o turno que ficar no meio */
+function subtractRange(shifts: OpenShift[], start: number, end: number): OpenShift[] {
+  return shifts.flatMap((s) => {
+    if (end <= s.start || start >= s.end) return [s];
+    const pieces: OpenShift[] = [];
+    if (start > s.start) pieces.push({ ...s, end: start });
+    if (end < s.end) pieces.push({ ...s, start: end });
+    return pieces;
+  });
 }
 
 export type SlotStatus = 'AVAILABLE' | 'LIMITED' | 'FULL';
@@ -86,9 +101,29 @@ export class ScheduleService {
    */
   async getOpeningHours() {
     const week = await this.getWeek();
+    const today = toZonedDateString(new Date(), await this.getTimezone());
+
+    // Datas com dia especial dentro do prazo de agendamento: o site usa estes horários no lugar da grade
+    const exceptionDates = await this.prisma.scheduleException.findMany({
+      where: { date: { gte: today, lte: addDays(today, BOOKING_WINDOW_DAYS) } },
+      select: { date: true },
+      distinct: ['date'],
+      orderBy: { date: 'asc' },
+    });
+    const specialDays = await Promise.all(
+      exceptionDates.map(async ({ date }) => {
+        const day = await this.loadOpenDay(this.prisma, date);
+        return {
+          date,
+          isOpen: Boolean(day),
+          periods: (day?.shifts ?? []).map((s) => ({ start: minutesToTime(s.start), end: minutesToTime(s.end) })),
+        };
+      }),
+    );
+
     return {
       bookingWindowDays: BOOKING_WINDOW_DAYS,
-      today: toZonedDateString(new Date(), await this.getTimezone()),
+      today,
       days: week.map((day) => {
         const shifts = day.shifts.filter((s) => s.isActive);
         return {
@@ -97,7 +132,78 @@ export class ScheduleService {
           periods: shifts.map((s) => ({ start: s.startTime, end: s.endTime })),
         };
       }),
+      specialDays,
     };
+  }
+
+  /** Dias especiais de hoje em diante */
+  async listExceptions() {
+    const today = toZonedDateString(new Date(), await this.getTimezone());
+    return this.prisma.scheduleException.findMany({
+      where: { date: { gte: today } },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+  }
+
+  async createException(input: ScheduleExceptionInput) {
+    const timeZone = await this.getTimezone();
+    const today = toZonedDateString(new Date(), timeZone);
+    if (input.date < today || input.date > addDays(today, EXCEPTION_WINDOW_DAYS)) {
+      throw new BadRequestException('Escolha uma data de hoje até daqui a um ano.');
+    }
+
+    const allDay = input.type === 'CLOSED' && Boolean(input.allDay);
+    if (input.type === 'OPEN') {
+      // Abrir por cima de um horário que já está aberto duplicaria as vagas
+      const current = await this.loadOpenDay(this.prisma, input.date);
+      const start = timeToMinutes(input.startTime!);
+      const end = timeToMinutes(input.endTime!);
+      const clash = current?.shifts.find((s) => start < s.end && end > s.start);
+      if (clash) {
+        throw new BadRequestException(
+          `Das ${minutesToTime(clash.start)} às ${minutesToTime(clash.end)} a agenda já está aberta nesse dia. ` +
+            'Para receber mais carros nesse horário, aumente a capacidade ou a tolerância do turno.',
+        );
+      }
+      const closedPeriod = await this.prisma.scheduleException.findFirst({
+        where: { date: input.date, type: 'CLOSED', startTime: { lt: input.endTime! }, endTime: { gt: input.startTime! } },
+      });
+      if (closedPeriod) {
+        throw new BadRequestException(
+          `Das ${closedPeriod.startTime} às ${closedPeriod.endTime} esse dia está fechado. Remova o fechamento antes de abrir esse horário.`,
+        );
+      }
+    }
+
+    const exception = await this.prisma.scheduleException.create({
+      data: {
+        date: input.date,
+        type: input.type,
+        startTime: allDay ? null : input.startTime,
+        endTime: allDay ? null : input.endTime,
+        capacity: input.type === 'OPEN' ? input.capacity ?? 1 : 1,
+        note: input.note || null,
+      },
+    });
+
+    // Fechar não desmarca ninguém: a equipe vê quantos agendamentos já existem no período
+    let affectedAppointments = 0;
+    if (input.type === 'CLOSED') {
+      const from = zonedTimeToUtc(input.date, allDay ? '00:00' : input.startTime!, timeZone);
+      const to = allDay ? zonedTimeToUtc(addDays(input.date, 1), '00:00', timeZone) : zonedTimeToUtc(input.date, input.endTime!, timeZone);
+      affectedAppointments = await this.prisma.appointment.count({
+        where: { status: { notIn: [...NON_BLOCKING_STATUSES, 'DELIVERED'] }, startsAt: { lt: to }, endsAt: { gt: from } },
+      });
+    }
+
+    return { success: true, exception, affectedAppointments };
+  }
+
+  async deleteException(id: string) {
+    const exception = await this.prisma.scheduleException.findUnique({ where: { id } });
+    if (!exception) throw new NotFoundException('Dia especial não encontrado.');
+    await this.prisma.scheduleException.delete({ where: { id } });
+    return { success: true };
   }
 
   async updateWeek(input: UpdateScheduleInput) {
@@ -323,25 +429,45 @@ export class ScheduleService {
     }
   }
 
+  /**
+   * Turnos abertos numa data: a grade semanal do dia, menos os períodos fechados
+   * e mais os horários extras cadastrados como dia especial.
+   */
   private async loadOpenDay(db: Db, date: string): Promise<OpenDay | null> {
-    const schedule = await db.businessSchedule.findUnique({
-      where: { dayOfWeek: dayOfWeekOf(date) },
-      include: { shifts: { where: { isActive: true } } },
-    });
-    if (!schedule || !schedule.isActive || schedule.shifts.length === 0) return null;
+    const [schedule, exceptions] = await Promise.all([
+      db.businessSchedule.findUnique({
+        where: { dayOfWeek: dayOfWeekOf(date) },
+        include: { shifts: { where: { isActive: true } } },
+      }),
+      db.scheduleException.findMany({ where: { date } }),
+    ]);
+
+    // "Fechar o dia inteiro" tira a grade normal; horários extras da mesma data continuam valendo
+    const closedAllDay = exceptions.some((e) => e.type === 'CLOSED' && !e.startTime);
+    let shifts: OpenShift[] =
+      schedule?.isActive && !closedAllDay
+        ? schedule.shifts.map((s) => ({
+            shiftName: s.shiftName,
+            start: timeToMinutes(s.startTime),
+            end: timeToMinutes(s.endTime),
+            capacity: s.simultaneousCapacity,
+            tolerance: s.overbookTolerance,
+          }))
+        : [];
+
+    for (const open of exceptions.filter((e) => e.type === 'OPEN' && e.startTime && e.endTime)) {
+      shifts.push({ shiftName: 'EXTRA', start: timeToMinutes(open.startTime!), end: timeToMinutes(open.endTime!), capacity: open.capacity, tolerance: 0 });
+    }
+    // Período fechado corta tudo: grade normal e horários extras
+    for (const closed of exceptions.filter((e) => e.type === 'CLOSED' && e.startTime && e.endTime)) {
+      shifts = subtractRange(shifts, timeToMinutes(closed.startTime!), timeToMinutes(closed.endTime!));
+    }
+    if (shifts.length === 0) return null;
 
     return {
-      dayOfWeek: schedule.dayOfWeek,
-      intervalMinutes: schedule.slotIntervalMinutes,
-      shifts: schedule.shifts
-        .map((s) => ({
-          shiftName: s.shiftName,
-          start: timeToMinutes(s.startTime),
-          end: timeToMinutes(s.endTime),
-          capacity: s.simultaneousCapacity,
-          tolerance: s.overbookTolerance,
-        }))
-        .sort((a, b) => a.start - b.start),
+      dayOfWeek: dayOfWeekOf(date),
+      intervalMinutes: schedule?.slotIntervalMinutes ?? 60,
+      shifts: shifts.sort((a, b) => a.start - b.start),
     };
   }
 }

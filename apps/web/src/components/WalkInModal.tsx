@@ -50,7 +50,7 @@ interface StaffSlot {
   tolerance: number;
 }
 
-const shiftLabels: Record<string, string> = { MANHA: 'Manhã', TARDE: 'Tarde', NOITE: 'Noite' };
+const shiftLabels: Record<string, string> = { MANHA: 'Manhã', TARDE: 'Tarde', NOITE: 'Noite', EXTRA: 'Horário extra' };
 
 const emptyForm = { customerName: '', customerPhone: '', plate: '', vehicleLabel: '', notes: '' };
 

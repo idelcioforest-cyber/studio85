@@ -172,6 +172,9 @@ export type AdminAppointmentsQueryInput = z.infer<typeof AdminAppointmentsQueryS
 
 export const UpdateAppointmentStatusSchema = z.object({
   status: z.nativeEnum(AppointmentStatus),
+  // Só ao desmarcar: motivo (fica no histórico) e se o cliente deve ser avisado
+  reason: z.string().trim().max(200, 'Motivo com no máximo 200 caracteres').optional(),
+  notifyClient: z.boolean().optional(),
 });
 
 export type UpdateAppointmentStatusInput = z.infer<typeof UpdateAppointmentStatusSchema>;
@@ -209,3 +212,28 @@ export const UpdateScheduleSchema = z.object({
 
 export type ScheduleDayInput = z.infer<typeof ScheduleDaySchema>;
 export type UpdateScheduleInput = z.infer<typeof UpdateScheduleSchema>;
+
+/**
+ * Dia especial: abre um horário extra ou fecha o dia/um período numa data específica
+ */
+export const ScheduleExceptionSchema = z
+  .object({
+    date: z.string().regex(DATE_REGEX, 'Escolha a data'),
+    type: z.enum(['OPEN', 'CLOSED'], { error: 'Escolha se vai abrir ou fechar' }),
+    // Só para fechar: true = o dia inteiro
+    allDay: z.boolean().optional(),
+    startTime: z.string().regex(TIME_REGEX, 'Horário inicial inválido').optional(),
+    endTime: z.string().regex(TIME_REGEX, 'Horário final inválido').optional(),
+    capacity: z.number().int().min(1, 'Pelo menos 1 carro').max(20).optional(),
+    note: z.string().trim().max(120, 'Observação com no máximo 120 caracteres').optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.type === 'CLOSED' && v.allDay) return;
+    if (!v.startTime) ctx.addIssue({ code: 'custom', message: 'Informe o horário inicial', path: ['startTime'] });
+    if (!v.endTime) ctx.addIssue({ code: 'custom', message: 'Informe o horário final', path: ['endTime'] });
+    if (v.startTime && v.endTime && v.startTime >= v.endTime) {
+      ctx.addIssue({ code: 'custom', message: 'O horário final deve ser depois do inicial', path: ['endTime'] });
+    }
+  });
+
+export type ScheduleExceptionInput = z.infer<typeof ScheduleExceptionSchema>;
