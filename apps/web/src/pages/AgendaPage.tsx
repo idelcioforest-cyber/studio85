@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ChevronLeft, ChevronRight, MessageCircle, Plus } from 'lucide-react';
-import { VehicleSizeCategory } from '@autowash/shared';
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, MessageCircle, Plus } from 'lucide-react';
+import { VehicleSizeCategory, arrivalNotice } from '@autowash/shared';
 import { useAuth } from '../context/AuthContext';
 import { SizeSelector } from '../components/SizeSelector';
 import { VehicleForm } from '../components/VehicleForm';
@@ -296,6 +296,7 @@ export default function AgendaPage() {
           )}
           <SummaryRow label="Total" value={formatPrice(confirmed.totalPriceCents)} />
         </dl>
+        <ArrivalNotice text={arrivalNotice(when.time, confirmed.isTelebusca)} className="mt-4" />
         <p className="mt-4 text-sm text-ink-muted">
           {onlineConfig?.enabled
             ? 'Pague agora pelo app (Pix ou cartão) ou no local, na retirada.'
@@ -592,6 +593,7 @@ export default function AgendaPage() {
                 : `Assinatura ${subscription.planName}: as lavagens deste período já foram usadas.`}
             </p>
           )}
+          {selectedTime && <ArrivalNotice text={arrivalNotice(selectedTime, telebusca)} />}
           <p className="text-xs text-ink-muted">
             {onlineConfig?.enabled
               ? 'Depois de confirmar, pague online com Pix ou cartão, ou no local, na retirada do veículo.'
@@ -905,5 +907,14 @@ function MonthCalendar({
         Dias apagados estão fechados ou fora do prazo de agendamento ({hours.bookingWindowDays} dias).
       </p>
     </div>
+  );
+}
+
+function ArrivalNotice({ text, className = '' }: { text: string; className?: string }) {
+  return (
+    <p className={`flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-left text-sm font-semibold text-warning ${className}`}>
+      <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      {text}
+    </p>
   );
 }

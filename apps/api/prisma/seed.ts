@@ -210,7 +210,7 @@ async function main() {
   const legalDocs = [
     {
       slug: 'terms_of_use',
-      version: '1.0',
+      version: '1.1',
       title: 'Termos de Uso',
       contentMarkdown: `Estes Termos de Uso regem o uso do aplicativo e do site do **Studio 85**, estética automotiva em Porto Alegre/RS, para consulta de serviços, agendamento e acompanhamento do atendimento. Ao criar uma conta, você declara que leu e concorda com estes termos e com a Política de Privacidade.
 
@@ -225,7 +225,7 @@ async function main() {
 
 - O agendamento só é confirmado depois que o app exibe o código da reserva.
 - Os horários disponíveis dependem da capacidade de atendimento de cada turno e podem mudar até a confirmação.
-- Chegue no horário marcado. Em caso de atraso, o atendimento pode ser remarcado de acordo com a disponibilidade do dia.
+- Chegue com pelo menos 15 minutos de antecedência do horário marcado, para a equipe receber e vistoriar o veículo. Em caso de atraso, o atendimento pode ser remarcado de acordo com a disponibilidade do dia.
 - Também é possível agendar pelo WhatsApp. Nesse caso, a confirmação é feita pela nossa equipe.
 
 ## 3. Valores e pagamento
@@ -344,6 +344,7 @@ Quando houver pagamento online:
       title: 'Agendamento confirmado',
       body: [
         'Olá, {primeiro_nome}! Seu horário no {empresa} está confirmado para {data} às {hora}.',
+        '{aviso_chegada}',
         '',
         'Serviços: {servicos}',
         'Veículo: {veiculo} ({placa})',

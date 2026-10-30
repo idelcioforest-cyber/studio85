@@ -30,6 +30,8 @@ export interface AppointmentEmailData {
   time: string;
   total: string;
   code: string;
+  /** Quando chegar (só no agendamento confirmado) */
+  arrivalNotice?: string;
   /** cids das fotos de depois já anexadas */
   photoCids?: string[];
 }
@@ -204,8 +206,8 @@ export function appointmentEmail(shop: ShopInfo, kind: AppointmentEmailKind, dat
       title: 'Agendamento confirmado',
       subject: `Agendamento confirmado: ${data.date}, ${data.time} — ${shop.company}`,
       preheader: `${data.date} às ${data.time} · ${data.services}`,
-      introHtml: 'Seu horário está reservado. Confira os detalhes:',
-      introText: 'Seu horário está reservado.',
+      introHtml: `Seu horário está reservado.${data.arrivalNotice ? ` <strong>${escapeHtml(data.arrivalNotice)}</strong>` : ''} Confira os detalhes:`,
+      introText: `Seu horário está reservado.${data.arrivalNotice ? ` ${data.arrivalNotice}` : ''}`,
       rows: [['Data', data.date], ['Horário', data.time], ['Veículo', vehicleLine], ['Serviços', data.services], ['Total', data.total], ['Código', data.code]] as [string, string][],
       primary: { label: 'Ver meu agendamento', href: myAppointmentsUrl },
       secondary: { label: 'Como chegar', href: shop.mapsUrl },

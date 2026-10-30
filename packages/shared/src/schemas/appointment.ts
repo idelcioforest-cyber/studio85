@@ -8,6 +8,22 @@ const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 // Um ou mais serviços feitos no mesmo horário: o tempo soma, mas ocupa a vaga de 1 carro
 export const MAX_SERVICES_PER_BOOKING = 6;
 
+// O cliente chega antes do horário marcado para dar tempo de receber e vistoriar o carro
+export const ARRIVAL_ADVANCE_MINUTES = 15;
+
+/**
+ * Aviso de chegada mostrado no agendamento, no e-mail e no WhatsApp.
+ * `time` é o horário marcado (HH:MM). Na Telebusca a equipe busca o carro, então o aviso muda.
+ */
+export function arrivalNotice(time: string | null, isTelebusca = false): string {
+  if (isTelebusca) return 'Deixe o veículo pronto no endereço informado no horário marcado: a equipe vai buscá-lo.';
+  const match = time ? /^(\d{2}):(\d{2})$/.exec(time) : null;
+  if (!match) return `Chegue com pelo menos ${ARRIVAL_ADVANCE_MINUTES} minutos de antecedência do horário marcado.`;
+  const total = (Number(match[1]) * 60 + Number(match[2]) - ARRIVAL_ADVANCE_MINUTES + 24 * 60) % (24 * 60);
+  const arrival = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  return `Chegue até as ${arrival}, com pelo menos ${ARRIVAL_ADVANCE_MINUTES} minutos de antecedência do horário marcado.`;
+}
+
 const ServiceIdsSchema = z
   .array(z.string().uuid('Serviço inválido'))
   .min(1, 'Selecione ao menos um serviço')

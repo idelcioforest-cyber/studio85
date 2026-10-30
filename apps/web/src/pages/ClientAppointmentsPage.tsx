@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, MessageCircle, Check } from 'lucide-react';
 import { api } from '../lib/api';
 import { PayOnlineModal, useOnlinePayment } from '../components/PayOnlineModal';
+import { arrivalNotice } from '@autowash/shared';
 import { formatDateTime, formatPlate, formatPrice, whatsappLink, adjustmentLabel } from '../lib/format';
 import {
   ACTIVE_STATUSES,
@@ -22,7 +23,6 @@ const progressSteps: { status: AppointmentStatus; label: string }[] = [
 ];
 
 const statusMessage: Partial<Record<AppointmentStatus, string>> = {
-  CONFIRMED: 'Horário reservado. Traga o veículo no horário marcado.',
   CHECK_IN: 'Recebemos seu carro. Ele entra em lavagem em breve.',
   IN_PROGRESS: 'Seu carro está em lavagem. Avisamos quando estiver pronto.',
   READY: 'Seu carro está pronto. Pode vir buscar.',
@@ -209,6 +209,11 @@ function AppointmentCard({
               );
             })}
           </ol>
+          {appointment.status === 'CONFIRMED' && (
+            <p className="mt-4 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm font-semibold text-warning">
+              Horário reservado. {arrivalNotice(when.time, appointment.isTelebusca)}
+            </p>
+          )}
           {statusMessage[appointment.status] && (
             <p className="mt-4 rounded-xl bg-subtle p-3 text-sm text-ink">{statusMessage[appointment.status]}</p>
           )}

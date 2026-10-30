@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { OutboundMessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MessageTemplateKey, UpdateMessageTemplateInput } from '@autowash/shared';
+import { MessageTemplateKey, UpdateMessageTemplateInput, arrivalNotice } from '@autowash/shared';
 import { WhatsAppBridgeService, WhatsAppSendError } from './whatsapp-bridge.service';
 import { readStoredFile } from '../../common/utils/private-storage.util';
 import { MailService } from '../mail/mail.service';
@@ -15,6 +15,7 @@ export const TEMPLATE_VARIABLES = [
   'servicos',
   'data',
   'hora',
+  'aviso_chegada',
   'total',
   'codigo',
   'endereco',
@@ -93,6 +94,7 @@ export class NotificationsService implements OnModuleInit {
         : appointment.vehiclePlate
       : 'sem placa';
 
+    const hora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(appointment.startsAt);
     const values: Record<string, string> = {
       nome: appointment.customerName,
       primeiro_nome: appointment.customerName.split(' ')[0],
@@ -102,7 +104,8 @@ export class NotificationsService implements OnModuleInit {
       data: new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone }).format(
         appointment.startsAt,
       ),
-      hora: new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone }).format(appointment.startsAt),
+      hora,
+      aviso_chegada: arrivalNotice(hora, appointment.isTelebusca),
       total: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(appointment.totalPriceCents / 100),
       codigo: appointment.readableCode,
       endereco: settings?.address || '',
@@ -213,6 +216,7 @@ export class NotificationsService implements OnModuleInit {
           services: values.servicos,
           date: values.data,
           time: values.hora,
+          arrivalNotice: values.aviso_chegada,
           total: values.total,
           code: values.codigo,
         },
