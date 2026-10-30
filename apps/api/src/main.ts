@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger } from '@nestjs/common';
+import { Logger, RequestMethod } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { existsSync, readFileSync } from 'fs';
@@ -41,7 +41,8 @@ async function bootstrap() {
               styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
               fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
               imgSrc: ["'self'", 'data:', 'blob:'],
-              connectSrc: ["'self'"],
+              // Pagar.me: o navegador gera o token do cartão direto na API deles (o número nunca passa por aqui)
+              connectSrc: ["'self'", 'https://api.pagar.me'],
               workerSrc: ["'self'"],
               manifestSrc: ["'self'"],
               objectSrc: ["'none'"],
@@ -78,7 +79,10 @@ async function bootstrap() {
 
   // 4. Prefixo de rota da API versionada (/api/v1)
   const apiPrefix = process.env.API_PREFIX || '/api/v1';
-  app.setGlobalPrefix(apiPrefix.replace(/^\//, ''));
+  // O webhook do Pagar.me fica em /api/webhook/pagarme (endereço já cadastrado no painel deles)
+  app.setGlobalPrefix(apiPrefix.replace(/^\//, ''), {
+    exclude: [{ path: 'api/webhook/pagarme', method: RequestMethod.POST }],
+  });
 
   // 5. Documentação OpenAPI / Swagger (acesso controlado)
   const config = new DocumentBuilder()

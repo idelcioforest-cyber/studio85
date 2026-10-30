@@ -42,7 +42,8 @@ const formatCents = (cents: number) =>
 const APPOINTMENT_INCLUDE = {
   // Serviço principal (mais longo) primeiro
   services: { orderBy: { durationMinutes: 'desc' } },
-  order: { include: { payments: { where: { status: 'PAID' }, orderBy: { paidAt: 'desc' } } } },
+  // Parcialmente estornado continua pago (pelo valor líquido)
+  order: { include: { payments: { where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED'] } }, orderBy: { paidAt: 'desc' } } } },
   user: { select: { email: true, mustChangePassword: true } },
   mediaAssets: {
     where: { visibility: 'CLIENT_VISIBLE' },
@@ -103,7 +104,10 @@ function toDto(a: AppointmentWithServices) {
       ? {
           status: 'PAID' as const,
           method: paid.method,
+          // ON_DELIVERY = recebido na loja; PAGARME = pago online pelo app
+          provider: paid.provider,
           amountCents: paid.amountCents,
+          refundedCents: paid.refundedCents,
           // Diferença em relação ao total: positivo = desconto, negativo = acréscimo
           adjustmentCents: a.totalPriceCents - paid.amountCents,
           adjustmentReason: a.order?.adjustmentReason ?? null,
@@ -266,8 +270,14 @@ export class AppointmentsService {
   }
 
   async cancelMine(userId: string, id: string) {
-    const appointment = await this.prisma.appointment.findFirst({ where: { id, userId } });
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id, userId },
+      include: { order: { include: { payments: { where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED'] } } } } } },
+    });
     if (!appointment) throw new NotFoundException('Agendamento não encontrado.');
+    if (appointment.order?.payments.length) {
+      throw new BadRequestException('Este agendamento já foi pago. Fale com a gente pelo WhatsApp para cancelar e receber o estorno.');
+    }
 
     if (appointment.status !== 'CONFIRMED') {
       throw new BadRequestException(
@@ -319,7 +329,7 @@ export class AppointmentsService {
     const { status } = input;
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: { order: { include: { payments: { where: { status: 'PAID' } } } } },
+      include: { order: { include: { payments: { where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED'] } } } } } },
     });
     if (!appointment) throw new NotFoundException('Agendamento não encontrado.');
 
@@ -327,7 +337,11 @@ export class AppointmentsService {
       throw new BadRequestException('Esta mudança de etapa não é permitida para o agendamento.');
     }
     if (status === 'CANCELLED' && appointment.order?.payments.length) {
-      throw new BadRequestException('Este atendimento já foi pago. Desfaça o recebimento no Caixa antes de desmarcar.');
+      throw new BadRequestException(
+        appointment.order.payments.some((p) => p.provider === 'PAGARME')
+          ? 'Este atendimento foi pago online. Estorne o pagamento em Pagamentos antes de desmarcar.'
+          : 'Este atendimento já foi pago. Desfaça o recebimento no Caixa antes de desmarcar.',
+      );
     }
 
     // Desmarcar libera a vaga na hora (cancelados não ocupam a agenda)
@@ -890,7 +904,7 @@ export class AppointmentsService {
     const dayEnd = zonedTimeToUtc(addDays(day, 1), '00:00', timeZone);
 
     const payments = await this.prisma.payment.findMany({
-      where: { status: 'PAID', paidAt: { gte: dayStart, lt: dayEnd } },
+      where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED'] }, paidAt: { gte: dayStart, lt: dayEnd } },
       include: { order: { include: { appointment: { include: APPOINTMENT_INCLUDE } } } },
       orderBy: { paidAt: 'desc' },
     });
@@ -899,7 +913,8 @@ export class AppointmentsService {
     let discountCents = 0;
     const received = payments.flatMap((p) => {
       if (!p.order.appointment) return [];
-      if (p.method in byMethod) byMethod[p.method as PaymentMethod] += p.amountCents;
+      // Online estornado em parte entra pelo valor líquido
+      if (p.method in byMethod) byMethod[p.method as PaymentMethod] += p.amountCents - p.refundedCents;
       discountCents += Math.max(0, p.order.appointment.totalPriceCents - p.amountCents);
       return [{ appointment: toDto(p.order.appointment) }];
     });

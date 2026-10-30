@@ -21,6 +21,8 @@ import { LegalModule } from './modules/legal/legal.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { MailModule } from './modules/mail/mail.module';
 import { SeoModule } from './modules/seo/seo.module';
+import { PagarmeModule } from './modules/pagarme/pagarme.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { SeoModule } from './modules/seo/seo.module';
     AppointmentsModule,
     LegalModule,
     WhatsAppModule,
+    PagarmeModule,
+    RevenueModule,
   ],
   providers: [
     // Rate Limiting global (ForestSecurity Seção 6)

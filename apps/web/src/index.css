@@ -9,6 +9,10 @@
    */
   :root {
     color-scheme: light;
+    /* Gráficos: paleta validada (daltonismo e contraste) sobre o cartão claro #ffffff */
+    --viz-1: #2a78d6;           /* série 1 (na loja / valor) */
+    --viz-2: #eb6834;           /* série 2 (online) */
+    --viz-down: #e34948;        /* queda no crescimento */
     --canvas: 248 250 252;      /* slate-50 */
     --surface: 255 255 255;     /* branco */
     --subtle: 241 245 249;      /* slate-100 */
@@ -28,6 +32,10 @@
 
   .dark {
     color-scheme: dark;
+    /* Mesmas cores com os tons do modo escuro, validados sobre o cartão #18181b */
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-down: #e66767;
     --canvas: 9 9 11;           /* zinc-950 */
     --surface: 24 24 27;        /* zinc-900 */
     --subtle: 39 39 42;         /* zinc-800 */

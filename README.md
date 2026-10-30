@@ -245,6 +245,66 @@ A ponte do WhatsApp (`services/whatsapp-bridge`) precisa ficar ligada o tempo to
 
 ---
 
-## 9. Licença e Confidencialidade
+## 9. Pagamento online (Pagar.me com split) e Receita
+
+O pagamento online é **opcional**: o cliente paga agora pelo app (Pix ou cartão) ou na loja, como antes. O split vale em toda cobrança:
+
+| Recebedor | Parte | Taxas, arredondamento, estorno e chargeback |
+|---|---|---|
+| Lava-jato | 98% | pagas por ele (`liable`, `charge_processing_fee`, `charge_remainder_fee`) |
+| Plataforma | 2% (`PAGARME_PLATFORM_FEE_PERCENT`; o admin pode mudar por recebedor) | nenhuma |
+
+O checkout só aparece com as chaves configuradas e o recebedor do lava-jato **Liberado** no Pagar.me. Isso exige cadastro e verificação de identidade em Financeiro → Pagamentos online → Recebedor.
+
+**Variáveis** (modelo em `infra/.env.example`):
+
+- `PAGARME_SECRET_KEY` e `PAGARME_PUBLIC_KEY`;
+- `PAGARME_PLATFORM_RECIPIENT_ID`, o recebedor da comissão;
+- `PAGARME_PLATFORM_FEE_PERCENT=2`;
+- `PAGARME_SOURCE_TAG=studio85`;
+- `PAGARME_MAX_INSTALLMENTS=1`;
+- opcionais: `PAGARME_WEBHOOK_USER` e `PAGARME_WEBHOOK_PASS`, para Basic Auth no webhook.
+
+Na Hostinger elas ficam no painel do app e só valem depois do próximo build.
+
+**Rotas** (prefixo `/api/v1`, exceto o webhook):
+
+| Rota | O que faz |
+|---|---|
+| `GET payments/online/config` | pagamento online disponível? E a chave pública para gerar o token do cartão |
+| `POST appointments/:id/payments/pix` | gera o Pix (expira em 30 min; pedir de novo reaproveita o mesmo) |
+| `POST appointments/:id/payments/card` | cobra o cartão. Só recebe o `card_token`: o número do cartão vai direto do navegador para o Pagar.me |
+| `GET payments/:id` | situação do pagamento; reconsulta o Pagar.me no máximo a cada 5 s |
+| `GET/PUT admin/payments/recipient` | recebedor do lava-jato (pessoa física ou empresa, conta bancária, transferência diária) |
+| `POST admin/payments/recipient/kyc-link` | gera o link de verificação de identidade |
+| `POST admin/payments/recipient/refresh` | atualiza o status do recebedor |
+| `GET admin/payments/summary` | resumo do período |
+| `GET admin/payments` | lista de pagamentos online |
+| `POST admin/payments/:id/refund` | estorno total ou parcial |
+| `GET admin/payments/webhook-events` | eventos recebidos |
+| `POST …/:id/reprocess` | reprocessa um evento |
+| `GET admin/revenue` | Receita: indicadores, demonstrativo, gráficos e comparação com o período anterior |
+| `POST /api/webhook/pagarme` | webhook (endereço cadastrado no painel do Pagar.me) |
+
+**Webhook:** a conta é compartilhada com outros sistemas, então ele segue estas regras:
+
+- Evento sem `metadata.source=studio85` e sem registro local recebe 200 e é ignorado.
+- Cada `event_id` é processado uma vez só.
+- O recurso sempre é reconsultado na API antes de mudar o banco; o conteúdo do aviso nunca é usado como verdade.
+- Falhas são refeitas sozinhas até 5 vezes (30 s, 1 min, 2 min, 4 min), sem fila externa. A cada 5 min o sistema retoma eventos pendentes, inclusive depois de reiniciar.
+- Assinaturas (planos mensais) entram na próxima etapa.
+
+**Testar com `sk_test_`:**
+
+1. Preencha as chaves de teste e o recebedor da plataforma.
+2. Em Financeiro → Pagamentos online → Recebedor, cadastre os dados e faça a verificação de identidade. No sandbox, o status pode ser aprovado pelo painel do Pagar.me.
+3. Clique em "Atualizar status" até aparecer **Liberado**.
+4. Como cliente, agende e use "Pagar agora". O Pix de teste é confirmado pelo painel do Pagar.me; o cartão aprovado usa os cartões de teste da documentação.
+5. Confira o split no painel do Pagar.me, o pagamento em Pagamentos online, os eventos na aba Eventos e os números em Financeiro → Receita.
+6. Faça um estorno parcial e confira o status "Estorno parcial", a comissão recalculada e o Caixa.
+
+---
+
+## 10. Licença e Confidencialidade
 
 Propriedade privada. Uso restrito e exclusivo do estabelecimento contratante. Proibida a distribuição pública de segredos, códigos-fonte ou esquemas de segurança.

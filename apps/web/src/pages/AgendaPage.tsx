@@ -6,6 +6,7 @@ import { VehicleSizeCategory } from '@autowash/shared';
 import { useAuth } from '../context/AuthContext';
 import { SizeSelector } from '../components/SizeSelector';
 import { VehicleForm } from '../components/VehicleForm';
+import { PayOnlineModal, useOnlinePayment } from '../components/PayOnlineModal';
 import { api, ApiError } from '../lib/api';
 import { useCatalog, useMyAddresses, useMyVehicles, usePublicSettings } from '../lib/queries';
 import {
@@ -108,6 +109,8 @@ export default function AgendaPage() {
   const [telebusca, setTelebusca] = useState(false);
   const [addressId, setAddressId] = useState('');
   const [confirmed, setConfirmed] = useState<Appointment | null>(null);
+  const [payingNow, setPayingNow] = useState(false);
+  const { data: onlineConfig } = useOnlinePayment();
 
   const { data: settings } = usePublicSettings();
   const telebuscaAvailable = Boolean(settings?.telebuscaEnabled);
@@ -261,8 +264,17 @@ export default function AgendaPage() {
           <SummaryRow label="Total" value={formatPrice(confirmed.totalPriceCents)} />
         </dl>
         <p className="mt-4 text-sm text-ink-muted">
-          Pagamento no local, na retirada. Você pode cancelar pelo app enquanto o atendimento não começar.
+          {onlineConfig?.enabled
+            ? 'Pague agora pelo app (Pix ou cartão) ou no local, na retirada.'
+            : 'Pagamento no local, na retirada.'}{' '}
+          Você pode cancelar pelo app enquanto o atendimento não começar e não estiver pago.
         </p>
+        {onlineConfig?.enabled && confirmed.payment.status !== 'PAID' && (
+          <button type="button" onClick={() => setPayingNow(true)} className="btn-primary mt-4 w-full">
+            Pagar agora com Pix ou cartão
+          </button>
+        )}
+        <PayOnlineModal appointment={payingNow ? confirmed : null} config={onlineConfig} onClose={() => setPayingNow(false)} />
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Link to="/meus-agendamentos" className="btn-primary">
             Ver meus agendamentos

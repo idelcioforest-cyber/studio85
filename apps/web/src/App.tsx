@@ -32,6 +32,8 @@ import AdminPatioPage from './pages/AdminPatioPage';
 import AdminAgendaPage from './pages/AdminAgendaPage';
 import AdminServicesPage from './pages/AdminServicesPage';
 import AdminFinanceiroPage from './pages/AdminFinanceiroPage';
+import AdminPagamentosPage from './pages/AdminPagamentosPage';
+import AdminReceitaPage from './pages/AdminReceitaPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import ClientAppointmentsPage from './pages/ClientAppointmentsPage';
 import LegalPage from './pages/LegalPage';
@@ -193,6 +195,8 @@ export default function App() {
           <Route path="/admin/agenda" element={adminOnly(<AdminAgendaPage />)} />
           <Route path="/admin/servicos" element={adminOnly(<AdminServicesPage />)} />
           <Route path="/admin/financeiro" element={adminOnly(<AdminFinanceiroPage />)} />
+          <Route path="/admin/pagamentos" element={adminOnly(<AdminPagamentosPage />)} />
+          <Route path="/admin/receita" element={adminOnly(<AdminReceitaPage />)} />
           <Route path="/admin/configuracoes" element={adminOnly(<AdminSettingsPage />)} />
 
           <Route path="/" element={isAdmin ? <Navigate to="/admin/patio" replace /> : <CatalogPage />} />

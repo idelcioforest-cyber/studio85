@@ -51,6 +51,8 @@ const PRIVATE_TITLES: [RegExp, string][] = [
   [/^\/admin\/agenda/, 'Agenda e capacidade'],
   [/^\/admin\/servicos/, 'Serviços'],
   [/^\/admin\/financeiro/, 'Caixa'],
+  [/^\/admin\/pagamentos/, 'Pagamentos online'],
+  [/^\/admin\/receita/, 'Receita'],
   [/^\/admin\/configuracoes/, 'Configurações'],
 ];
 

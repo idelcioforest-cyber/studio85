@@ -77,7 +77,10 @@ export interface Appointment {
     | {
         status: 'PAID';
         method: PaymentMethod;
+        // ON_DELIVERY = recebido na loja; PAGARME = pago online pelo app
+        provider: 'ON_DELIVERY' | 'PAGARME' | 'MERCADO_PAGO' | 'STONE';
         amountCents: number;
+        refundedCents: number;
         // Diferença do total no caixa: positivo = desconto, negativo = acréscimo
         adjustmentCents: number;
         adjustmentReason: string | null;

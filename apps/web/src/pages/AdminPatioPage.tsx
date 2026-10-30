@@ -238,7 +238,7 @@ export default function AdminPatioPage() {
                 </span>
                 {a.payment.status === 'PAID' ? (
                   <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-bold text-success">
-                    Pago · {paymentMethodLabels[a.payment.method]}
+                    {a.payment.provider === 'PAGARME' ? 'Pago online' : 'Pago'} · {paymentMethodLabels[a.payment.method]}
                   </span>
                 ) : (
                   !['CANCELLED', 'NO_SHOW'].includes(a.status) && (

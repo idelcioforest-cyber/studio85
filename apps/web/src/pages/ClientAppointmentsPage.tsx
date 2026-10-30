@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, MessageCircle, Check } from 'lucide-react';
 import { api } from '../lib/api';
+import { PayOnlineModal, useOnlinePayment } from '../components/PayOnlineModal';
 import { formatDateTime, formatPlate, formatPrice, whatsappLink, adjustmentLabel } from '../lib/format';
 import {
   ACTIVE_STATUSES,
@@ -139,7 +140,11 @@ function AppointmentCard({
   cancelling: boolean;
   onCancel: () => void;
 }) {
+  const { data: onlineConfig } = useOnlinePayment();
+  const [paying, setPaying] = useState(false);
   const when = formatDateTime(appointment.startsAt);
+  const paid = appointment.payment.status === 'PAID';
+  const canPayOnline = Boolean(onlineConfig?.enabled) && !paid && ['CONFIRMED', 'CHECK_IN', 'IN_PROGRESS', 'READY'].includes(appointment.status);
   const isActive = ACTIVE_STATUSES.includes(appointment.status);
   const currentStep = progressSteps.findIndex((s) => s.status === appointment.status);
 
@@ -164,7 +169,9 @@ function AppointmentCard({
           </p>
           {appointment.payment.status === 'PAID' && (
             <>
-              <p className="text-xs font-semibold text-success">Pago · {paymentMethodLabels[appointment.payment.method]}</p>
+              <p className="text-xs font-semibold text-success">
+                {appointment.payment.provider === 'PAGARME' ? 'Pago online' : 'Pago'} · {paymentMethodLabels[appointment.payment.method]}
+              </p>
               {appointment.payment.adjustmentCents !== 0 && (
                 <p className="text-xs text-ink-muted">{adjustmentLabel(appointment.payment.adjustmentCents)}</p>
               )}
@@ -249,13 +256,19 @@ function AppointmentCard({
               WhatsApp
             </a>
           )}
-          {appointment.status === 'CONFIRMED' && (
+          {canPayOnline && (
+            <button type="button" onClick={() => setPaying(true)} className="btn-primary px-3 py-2">
+              Pagar agora
+            </button>
+          )}
+          {appointment.status === 'CONFIRMED' && !paid && (
             <button type="button" onClick={onCancel} disabled={cancelling} className="btn-danger px-3 py-2">
               {cancelling ? 'Cancelando…' : 'Cancelar'}
             </button>
           )}
         </div>
       </div>
+      <PayOnlineModal appointment={paying ? appointment : null} config={onlineConfig} onClose={() => setPaying(false)} />
     </li>
   );
 }

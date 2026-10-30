@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FinanceNav } from '../components/FinanceNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, FileText, Paperclip } from 'lucide-react';
 import { PaymentModal, validateReceipt } from '../components/PaymentModal';
@@ -60,6 +61,7 @@ export default function AdminFinanceiroPage() {
 
   return (
     <div className="animate-fadeIn mx-auto max-w-5xl space-y-6">
+      <FinanceNav />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Financeiro</p>
