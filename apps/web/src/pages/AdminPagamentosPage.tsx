@@ -80,20 +80,28 @@ export default function AdminPagamentosPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [refunding, setRefunding] = useState<OnlinePaymentRow | null>(null);
 
-  const recipientQuery = useQuery({ queryKey: ['admin', 'payments', 'recipient'], queryFn: () => api<RecipientState>('/admin/payments/recipient') });
+  // Pagamentos confirmados pelo webhook aparecem sozinhos enquanto a tela está aberta
+  const recipientQuery = useQuery({
+    queryKey: ['admin', 'payments', 'recipient'],
+    queryFn: () => api<RecipientState>('/admin/payments/recipient'),
+    refetchInterval: 60_000,
+  });
   const summary = useQuery({
     queryKey: ['admin', 'payments', 'summary', from, to],
     queryFn: () => api<Summary>(`/admin/payments/summary?from=${from}&to=${to}`),
+    refetchInterval: 20_000,
   });
   const list = useQuery({
     queryKey: ['admin', 'payments', 'list', from, to],
     queryFn: () => api<OnlinePaymentRow[]>(`/admin/payments?from=${from}&to=${to}`),
     enabled: tab === 'payments',
+    refetchInterval: 20_000,
   });
   const events = useQuery({
     queryKey: ['admin', 'payments', 'events'],
     queryFn: () => api<WebhookEvent[]>('/admin/payments/webhook-events'),
     enabled: tab === 'events',
+    refetchInterval: 20_000,
   });
 
   const refresh = useMutation({

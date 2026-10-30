@@ -223,4 +223,22 @@ describe('Pagar.me: split, cobrança, estorno e webhook', () => {
     expect(() => webhooks.assertAuthorized(`Basic ${Buffer.from('pagarme:segredo-forte').toString('base64')}`)).not.toThrow();
     process.env.PAGARME_WEBHOOK_USER = '';
   });
+
+  it('7. Conferência automática: Pix pago sem webhook entra no caixa; consultado há pouco espera a vez', async () => {
+    const a = await newAppointment(`TST-SYNC-${Date.now() % 100000}`);
+    const pix = await payments.createPix(userId, a.id);
+    const pay = await prisma.payment.findUniqueOrThrow({ where: { id: pix.id } });
+    fake.pay(pay.externalOrderId!);
+
+    // Acabou de ser consultado: ainda não entra na rodada
+    await payments.reconcilePending();
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: pix.id } })).status).toBe('PENDING');
+
+    await prisma.payment.update({ where: { id: pix.id }, data: { lastSyncedAt: new Date(Date.now() - 10 * 60 * 1000) } });
+    await payments.reconcilePending();
+    const after = await prisma.payment.findUniqueOrThrow({ where: { id: pix.id } });
+    expect(after.status).toBe('PAID');
+    const entries = await prisma.financialEntry.findMany({ where: { paymentId: pix.id } });
+    expect(entries.map((e) => [e.entryType, e.amountCents])).toEqual([['SALE', 7000]]);
+  });
 });

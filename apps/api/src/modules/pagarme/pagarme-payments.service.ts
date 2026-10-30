@@ -19,6 +19,10 @@ import { buildSplit, platformShareCents } from './split-builder';
 
 const PIX_EXPIRES_IN_SECONDS = 1800;
 const SYNC_MIN_INTERVAL_MS = 5000;
+// Conferência automática: pedidos de até 1 dia, cada um no máximo a cada 2 minutos
+const RECONCILE_WINDOW_MS = 86_400_000;
+const RECONCILE_MIN_AGE_MS = 2 * 60 * 1000;
+const RECONCILE_BATCH = 20;
 const TIME_ZONE = 'America/Sao_Paulo';
 // Atendimentos que ainda podem ser pagos online
 const PAYABLE_STATUSES = ['CONFIRMED', 'CHECK_IN', 'IN_PROGRESS', 'READY'];
@@ -103,6 +107,35 @@ export class PagarmePaymentsService {
       }
     }
     return this.view(payment);
+  }
+
+  /**
+   * Rede de segurança do webhook: reconsulta no Pagar.me os pagamentos ainda em aberto
+   * (Pix gerado, cartão em análise). Se um aviso se perder, o pagamento entra no caixa mesmo assim.
+   */
+  async reconcilePending(): Promise<number> {
+    if (!pagarmeConfig.apiReady) return 0;
+    const now = Date.now();
+    const pending = await this.prisma.payment.findMany({
+      where: {
+        provider: 'PAGARME',
+        status: { in: ['PENDING', 'AUTHORIZED'] },
+        externalOrderId: { not: null },
+        createdAt: { gt: new Date(now - RECONCILE_WINDOW_MS) },
+        OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: new Date(now - RECONCILE_MIN_AGE_MS) } }],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: RECONCILE_BATCH,
+      select: { externalOrderId: true },
+    });
+    for (const { externalOrderId } of pending) {
+      try {
+        await this.applyOrder(await this.client.getOrder(externalOrderId!));
+      } catch (error) {
+        this.logger.warn(`Conferência do pedido ${externalOrderId} falhou: ${(error as Error).message}`);
+      }
+    }
+    return pending.length;
   }
 
   /** Aplica o pedido reconsultado na API ao pagamento local (criação, consulta e webhook) */

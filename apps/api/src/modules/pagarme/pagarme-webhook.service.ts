@@ -20,6 +20,7 @@ interface WebhookBody {
 
 const MAX_ATTEMPTS = 5;
 const SWEEP_EVERY_MS = 5 * 60 * 1000;
+const RECONCILE_EVERY_MS = 2 * 60 * 1000;
 
 /**
  * Webhook do Pagar.me. A conta é compartilhada com outros sistemas, então:
@@ -31,6 +32,7 @@ const SWEEP_EVERY_MS = 5 * 60 * 1000;
 export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PagarmeWebhookService.name);
   private sweeper: NodeJS.Timeout | null = null;
+  private reconciler: NodeJS.Timeout | null = null;
 
   constructor(
     private prisma: PrismaService,
@@ -43,10 +45,14 @@ export class PagarmeWebhookService implements OnModuleInit, OnModuleDestroy {
     // Retoma eventos pendentes (ex.: o processo reiniciou no meio)
     this.sweeper = setInterval(() => this.sweep().catch(() => undefined), SWEEP_EVERY_MS);
     this.sweeper.unref();
+    // Pagamentos em aberto são conferidos na API mesmo sem webhook (aviso perdido ou não cadastrado)
+    this.reconciler = setInterval(() => this.payments.reconcilePending().catch(() => undefined), RECONCILE_EVERY_MS);
+    this.reconciler.unref();
   }
 
   onModuleDestroy() {
     if (this.sweeper) clearInterval(this.sweeper);
+    if (this.reconciler) clearInterval(this.reconciler);
   }
 
   /** Basic Auth opcional: só é exigido com PAGARME_WEBHOOK_USER definido */

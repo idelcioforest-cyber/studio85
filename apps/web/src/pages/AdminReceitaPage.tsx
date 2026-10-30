@@ -106,10 +106,12 @@ export default function AdminReceitaPage() {
   const [custom, setCustom] = useState({ from: `${todayISO().slice(0, 8)}01`, to: todayISO() });
   const range = useMemo(() => resolvePeriod(period, custom), [period, custom]);
 
-  const { data, isLoading, isError, isFetching } = useQuery({
+  const { data, isLoading, isError, isPlaceholderData } = useQuery({
     queryKey: ['admin', 'revenue', range.from, range.to],
     queryFn: () => api<RevenueReport>(`/admin/revenue?from=${range.from}&to=${range.to}`),
     placeholderData: (prev) => prev,
+    // Gráficos acompanham os pagamentos que entram (online ou no caixa) com a tela aberta
+    refetchInterval: 30_000,
   });
 
   const t = data?.totals;
@@ -170,7 +172,7 @@ export default function AdminReceitaPage() {
       {isLoading && <p className="py-10 text-center text-sm text-ink-muted">Carregando receita…</p>}
 
       {data && t && (
-        <div className={`space-y-6 transition-opacity ${isFetching ? 'opacity-60' : ''}`} aria-busy={isFetching}>
+        <div className={`space-y-6 transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`} aria-busy={isPlaceholderData}>
           {/* Número principal + indicadores */}
           <section className="card p-5 sm:p-6" aria-labelledby="rev-hero">
             <p id="rev-hero" className="text-sm font-semibold text-ink-muted">Faturamento líquido</p>
