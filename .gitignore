@@ -5,6 +5,7 @@ node_modules/
 
 # Builds e outputs
 dist/
+dist-seed/
 build/
 out/
 .next/

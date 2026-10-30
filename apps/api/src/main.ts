@@ -1,18 +1,45 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { existsSync } from 'fs';
+import * as path from 'path';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Atrás do proxy da hospedagem: o IP real do cliente vem no X-Forwarded-For (limite de tentativas por IP)
+  if (process.env.TRUST_PROXY !== 'false' && isProduction) {
+    app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
+  }
 
   // 1. Headers de segurança HTTP via Helmet (ForestSecurity Seção 9)
   app.use(
     helmet({
-      contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+      contentSecurityPolicy: isProduction
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'"],
+              styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+              fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+              imgSrc: ["'self'", 'data:', 'blob:'],
+              connectSrc: ["'self'"],
+              workerSrc: ["'self'"],
+              manifestSrc: ["'self'"],
+              objectSrc: ["'none'"],
+              frameAncestors: ["'none'"],
+              baseUri: ["'self'"],
+              formAction: ["'self'"],
+            },
+          }
+        : false,
       crossOriginEmbedderPolicy: false,
     }),
   );
@@ -53,12 +80,39 @@ async function bootstrap() {
     .addCookieAuth('autowash_access_token')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+  // Em produção a documentação fica desligada, a menos que SWAGGER_ENABLED=true
+  const swaggerEnabled = !isProduction || process.env.SWAGGER_ENABLED === 'true';
+  if (swaggerEnabled) {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+  }
+
+  // 6. Site (build do apps/web) servido pelo mesmo processo: um único app Node na hospedagem
+  const webDist = path.resolve(process.env.WEB_DIST_PATH || path.join(__dirname, '../../web/dist'));
+  const webIndex = path.join(webDist, 'index.html');
+  const serveWeb = existsSync(webIndex);
+  if (serveWeb) {
+    app.useStaticAssets(webDist, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        // Arquivos com hash no nome nunca mudam; o resto (index, sw.js, manifest) é revalidado
+        const immutable = filePath.includes(`${path.sep}assets${path.sep}`);
+        res.setHeader('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
+    // Rotas do React (/agenda, /admin/patio...) devolvem o index.html; /api e arquivos inexistentes seguem para o 404
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if ((req.method !== 'GET' && req.method !== 'HEAD') || /^\/api(\/|$)/.test(req.path) || path.extname(req.path)) {
+        return next();
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(webIndex);
+    });
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
@@ -66,7 +120,8 @@ async function bootstrap() {
   logger.log(`=======================================================`);
   logger.log(`🚗 Studio 85 API iniciada com sucesso na porta: ${port}`);
   logger.log(`🌐 Prefixo da API: ${apiPrefix}`);
-  logger.log(`📖 Documentação Swagger: http://localhost:${port}/api/docs`);
+  if (swaggerEnabled) logger.log(`📖 Documentação Swagger: http://localhost:${port}/api/docs`);
+  logger.log(serveWeb ? `🖥️  Site servido a partir de ${webDist}` : '🖥️  Build do site não encontrado: servindo só a API');
   logger.log(`🛡️  Políticas ForestSecurity: Ativas e em conformidade`);
   logger.log(`=======================================================`);
 }

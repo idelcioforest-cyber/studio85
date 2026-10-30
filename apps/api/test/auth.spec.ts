@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { MailService } from '../src/modules/mail/mail.service';
 import { UserRole } from '@autowash/shared';
 
 describe('AuthService (Integration with DB)', () => {
@@ -20,7 +21,7 @@ describe('AuthService (Integration with DB)', () => {
           signOptions: { expiresIn: '1h' },
         }),
       ],
-      providers: [AuthService, PrismaService],
+      providers: [AuthService, PrismaService, MailService],
     }).compile();
 
     authService = module.get<AuthService>(AuthService);

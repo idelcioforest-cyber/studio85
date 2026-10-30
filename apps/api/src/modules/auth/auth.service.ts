@@ -3,10 +3,12 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import {
   RegisterInput,
   LoginInput,
@@ -31,6 +33,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private mail: MailService,
   ) {}
 
   /**
@@ -123,14 +126,20 @@ export class AuthService {
       return newUser;
     });
 
-    // Simula envio de e-mail com o código de 6 dígitos
-    this.logger.log(
-      `[EMAIL TRANSACIONAL] Código de verificação para ${user.email}: ${verificationCode} (Expira em 15min)`,
-    );
+    // A conta já existe: se o e-mail falhar, o cliente pede outro código na mesma tela
+    let mailSent = true;
+    try {
+      await this.mail.sendVerificationCode(user.email!, user.name, verificationCode);
+    } catch (error) {
+      mailSent = false;
+      this.logger.error(`Falha ao enviar o código de verificação para ${user.email}: ${(error as Error).message}`);
+    }
 
     return {
       success: true,
-      message: 'Cadastro realizado com sucesso. Insira o código enviado ao seu e-mail para ativar a conta.',
+      message: mailSent
+        ? 'Cadastro realizado com sucesso. Insira o código enviado ao seu e-mail para ativar a conta.'
+        : 'Cadastro realizado, mas não conseguimos enviar o e-mail agora. Toque em "Reenviar código" em instantes.',
       user: {
         id: user.id,
         name: user.name,
@@ -201,6 +210,7 @@ export class AuthService {
       where: { email: input.email },
       select: {
         id: true,
+        name: true,
         email: true,
         status: true,
         emailVerifiedAt: true,
@@ -235,7 +245,12 @@ export class AuthService {
       },
     });
 
-    this.logger.log(`[EMAIL TRANSACIONAL] Novo código para ${user.email}: ${newCode}`);
+    try {
+      await this.mail.sendVerificationCode(user.email!, user.name, newCode);
+    } catch (error) {
+      this.logger.error(`Falha ao reenviar o código de verificação para ${user.email}: ${(error as Error).message}`);
+      throw new ServiceUnavailableException('Não foi possível enviar o e-mail agora. Tente novamente em 1 minuto.');
+    }
 
     return {
       success: true,

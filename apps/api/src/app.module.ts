@@ -19,6 +19,7 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
       },
     ]),
     PrismaModule,
+    MailModule,
     AuthModule,
     HealthModule,
     VehiclesModule,
