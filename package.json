@@ -30,6 +30,9 @@
   ],
   "author": "Forest Development Team",
   "license": "UNLICENSED",
+  "dependencies": {
+    "typescript": "^5.6.3"
+  },
   "devDependencies": {
     "concurrently": "^10.0.6"
   },

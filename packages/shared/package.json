@@ -9,6 +9,7 @@
     "test": "echo \"Shared package types validated\""
   },
   "dependencies": {
+    "typescript": "^5.6.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
