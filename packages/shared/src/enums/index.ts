@@ -7,6 +7,8 @@ export enum UserRole {
   ATTENDANT = 'ATTENDANT',
   WASHER = 'WASHER',
   CLIENT = 'CLIENT',
+  // Dono da plataforma: vê os indicadores de uso; o administrador do lava-jato não tem acesso
+  SUPER_ADMIN = 'SUPER_ADMIN',
 }
 
 /**

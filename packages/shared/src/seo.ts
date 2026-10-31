@@ -56,6 +56,7 @@ const PRIVATE_TITLES: [RegExp, string][] = [
   [/^\/admin\/configuracoes/, 'Configurações'],
   [/^\/admin\/assinaturas/, 'Assinaturas'],
   [/^\/admin\/avisos/, 'Avisos'],
+  [/^\/plataforma/, 'Plataforma'],
   [/^\/assinatura\//, 'Cartão da assinatura'],
 ];
 

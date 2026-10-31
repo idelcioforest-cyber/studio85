@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock, MessageCircle, Plus } from 'lucide-react';
@@ -8,6 +8,7 @@ import { SizeSelector } from '../components/SizeSelector';
 import { VehicleForm } from '../components/VehicleForm';
 import { PayOnlineModal, useOnlinePayment } from '../components/PayOnlineModal';
 import { api, ApiError } from '../lib/api';
+import { track } from '../lib/analytics';
 import { useCatalog, useMyAddresses, useMyVehicles, usePublicSettings } from '../lib/queries';
 import {
   addDaysISO,
@@ -92,7 +93,7 @@ function writeDraft(draft: BookingDraft | null) {
 }
 
 export default function AgendaPage() {
-  const { isLoggedIn, openAuthModal } = useAuth();
+  const { isLoggedIn, isAdmin, openAuthModal } = useAuth();
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const [draft] = useState(readDraft);
@@ -211,6 +212,17 @@ export default function AgendaPage() {
   const selectedTime = time ?? (availability?.freeTime && /^\d{2}:\d{2}$/.test(customTime) ? customTime : null);
   const telebuscaFee = telebusca ? settings?.telebuscaFeeCents ?? 0 : 0;
 
+  // Medição anônima do funil: abriu o agendamento e escolheu serviço e horário (a equipe não conta)
+  const slotTracked = useRef(false);
+  useEffect(() => {
+    if (!isAdmin) track('booking_open');
+  }, [isAdmin]);
+  useEffect(() => {
+    if (isAdmin || slotTracked.current || selected.length === 0 || !selectedTime) return;
+    slotTracked.current = true;
+    track('booking_slot');
+  }, [isAdmin, selected.length, selectedTime]);
+
   // Só quem assina recebe algo aqui; para os demais a lista vem vazia e nada muda na tela.
   // É uma prévia: o servidor confirma ao agendar (data dentro do período pago e lavagens sobrando).
   const { data: mySubscriptions = [] } = useQuery({
@@ -253,6 +265,7 @@ export default function AgendaPage() {
         },
       }),
     onSuccess: (data) => {
+      if (!isAdmin) track('booking_done');
       setConfirmed(data.appointment);
       writeDraft(null);
       queryClient.invalidateQueries({ queryKey: ['appointments'] });

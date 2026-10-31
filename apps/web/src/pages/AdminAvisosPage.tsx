@@ -492,7 +492,7 @@ function CampaignContacts({ id, onBack, whatsapp }: { id: string; onBack: () => 
             </ul>
           </section>
 
-          <div className="card sticky bottom-20 z-30 flex flex-col gap-2 p-3 shadow-lg sm:flex-row sm:items-center sm:justify-between lg:bottom-4">
+          <div className="card sticky bottom-20 z-30 flex flex-col gap-2 p-3 shadow-lg sm:flex-row sm:items-center sm:justify-between xl:bottom-4">
             <p className="text-sm font-semibold text-ink" aria-live="polite">
               {selected.length} de {MAX_CAMPAIGN_BATCH} escolhidos
               {busy && <span className="block text-xs font-normal text-ink-muted">Espere a fila atual terminar para mandar mais.</span>}

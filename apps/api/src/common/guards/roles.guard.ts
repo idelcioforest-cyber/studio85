@@ -26,6 +26,12 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Acesso negado: credenciais insuficientes');
     }
 
+    // Área do dono da plataforma: exclusiva, o administrador do lava-jato não entra
+    if (requiredRoles.includes(UserRole.SUPER_ADMIN)) {
+      if (user.roles.includes(UserRole.SUPER_ADMIN)) return true;
+      throw new ForbiddenException('Acesso negado: área exclusiva do dono da plataforma');
+    }
+
     // Administrador tem acesso amplo funcional
     if (user.roles.includes(UserRole.ADMIN)) {
       return true;

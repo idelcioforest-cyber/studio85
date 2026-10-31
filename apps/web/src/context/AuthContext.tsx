@@ -41,6 +41,8 @@ interface AuthModalState {
 interface AuthContextType {
   user: AuthUser | null;
   isAdmin: boolean;
+  // Dono da plataforma: vê os indicadores de uso
+  isSuperAdmin: boolean;
   isLoggedIn: boolean;
   login: (email: string, password: string, remember?: boolean) => Promise<AuthUser>;
   completeProfile: (data: CompleteProfileData) => Promise<void>;
@@ -179,6 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const closeAuthModal = () => setAuthModal((prev) => ({ ...prev, open: false }));
 
   const isAdmin = Boolean(user?.roles?.includes('ADMIN') || user?.roles?.includes('MANAGER'));
+  const isSuperAdmin = Boolean(user?.roles?.includes('SUPER_ADMIN'));
   const isLoggedIn = Boolean(user);
 
   return (
@@ -186,6 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isAdmin,
+        isSuperAdmin,
         isLoggedIn,
         login,
         completeProfile,

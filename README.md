@@ -245,6 +245,8 @@ A ponte do WhatsApp (`services/whatsapp-bridge`) precisa ficar ligada o tempo to
 
 **Avisos (WhatsApp em massa):** no menu Avisos, o dono escreve a mensagem (com `{primeiro_nome}`, `{nome}` e `{empresa}`) e escolhe até 20 contatos por vez: clientes com conta e clientes de balcão com celular, um por número. A fila fica no banco e manda uma mensagem por minuto, só com o número conectado; um lote novo só entra quando o anterior termina. O mesmo número nunca recebe o mesmo aviso duas vezes; quem não recebeu (falha ou envio parado) pode ser escolhido de novo. Cada envio também aparece em Configurações → WhatsApp → Últimos envios.
 
+**Super admin (Plataforma):** o papel `SUPER_ADMIN` é do dono da plataforma e é exclusivo: o `ADMIN` do lava-jato não acessa (`GET /super/overview` responde 403 e a página `/plataforma` não aparece). A página mostra, por período (7, 30 ou 90 dias), visitas, clientes que entraram, cadastros, agendamentos (app e equipe), serviços, pagamentos online e comissão, o funil do agendamento (entrou → abriu o agendamento → escolheu serviço e horário → confirmou) e quem não finalizou (cadastro sem e-mail confirmado ou incompleto, nunca agendou, abriu o agendamento e desistiu). "Clientes que entraram" vem de `user_activity_days`, gravado uma vez por cliente por dia no login (JWT). Visitas e funil vêm de `site_events`: o navegador manda um código aleatório que vale só enquanto a aba está aberta (sem cookie e sem dado pessoal), cada etapa conta uma vez por aba por dia, e robôs e a equipe do lava-jato não contam. A medição está descrita na Política de Privacidade (versão 1.1).
+
 ---
 
 ## 9. Pagamento online (Pagar.me com split) e Receita

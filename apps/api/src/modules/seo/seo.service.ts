@@ -71,6 +71,7 @@ export class SeoService {
       'User-agent: *',
       'Allow: /',
       'Disallow: /admin',
+      'Disallow: /plataforma',
       'Disallow: /meus-agendamentos',
       'Disallow: /garagem',
       'Disallow: /enderecos',

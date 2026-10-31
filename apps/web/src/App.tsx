@@ -19,8 +19,10 @@ import {
   MessageCircle,
   Repeat,
   Megaphone,
+  Gauge,
   type LucideIcon,
 } from 'lucide-react';
+import { track } from './lib/analytics';
 import { api } from './lib/api';
 import { useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
@@ -41,6 +43,7 @@ import AdminReceitaPage from './pages/AdminReceitaPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import AdminAssinaturasPage from './pages/AdminAssinaturasPage';
 import AdminAvisosPage from './pages/AdminAvisosPage';
+import SuperAdminPage from './pages/SuperAdminPage';
 import SubscriptionSetupPage from './pages/SubscriptionSetupPage';
 import ClientAppointmentsPage from './pages/ClientAppointmentsPage';
 import LegalPage from './pages/LegalPage';
@@ -76,7 +79,14 @@ function RouteMeta() {
 }
 
 export default function App() {
-  const { user, isLoggedIn, isAdmin, logout, openAuthModal } = useAuth();
+  const { user, isLoggedIn, isAdmin, isSuperAdmin, logout, openAuthModal } = useAuth();
+
+  // Medição anônima: conta a visita (a equipe do lava-jato não conta). Espera o login carregar.
+  useEffect(() => {
+    if (isAdmin) return;
+    const timer = setTimeout(() => track('visit'), 1500);
+    return () => clearTimeout(timer);
+  }, [isAdmin]);
   const { data: settings } = usePublicSettings();
   // Assinaturas só aparecem no painel quando o dono libera (o site público nunca fica sabendo)
   const { data: adminSettings } = useQuery({
@@ -153,7 +163,8 @@ export default function App() {
             </div>
           </Link>
 
-          <nav aria-label="Principal" className="hidden items-center gap-1 lg:flex">
+          {/* O painel tem mais itens: o menu de cima só a partir de 1280 px (antes disso, a barra de baixo) */}
+          <nav aria-label="Principal" className={`hidden items-center gap-1 ${isAdmin ? 'xl:flex' : 'lg:flex'}`}>
             {navLinks.map((item) => (
               <NavLink
                 key={item.to}
@@ -172,6 +183,21 @@ export default function App() {
           </nav>
 
           <div className="flex items-center gap-1.5">
+            {isSuperAdmin && (
+              <NavLink
+                to="/plataforma"
+                aria-label="Plataforma"
+                className={({ isActive }) =>
+                  `inline-flex items-center gap-2 rounded-lg p-2 text-sm font-semibold transition 2xl:px-3 ${
+                    isActive ? 'bg-subtle text-ink' : 'text-ink-muted hover:bg-subtle hover:text-ink'
+                  }`
+                }
+                title="Plataforma"
+              >
+                <Gauge className="h-5 w-5 2xl:h-4 2xl:w-4" aria-hidden="true" />
+                <span className="hidden 2xl:inline">Plataforma</span>
+              </NavLink>
+            )}
             <button
               type="button"
               onClick={() => setDarkMode(!darkMode)}
@@ -189,7 +215,9 @@ export default function App() {
                 <button
                   type="button"
                   onClick={logout}
-                  className="hidden items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-ink-muted transition hover:bg-subtle hover:text-ink lg:inline-flex"
+                  className={`hidden items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-ink-muted transition hover:bg-subtle hover:text-ink ${
+                    isAdmin ? 'xl:inline-flex' : 'lg:inline-flex'
+                  }`}
                 >
                   <LogOut className="h-4 w-4" aria-hidden="true" />
                   Sair
@@ -217,6 +245,7 @@ export default function App() {
           <Route path="/admin/configuracoes" element={adminOnly(<AdminSettingsPage />)} />
           <Route path="/admin/assinaturas" element={adminOnly(<AdminAssinaturasPage />)} />
           <Route path="/admin/avisos" element={adminOnly(<AdminAvisosPage />)} />
+          <Route path="/plataforma" element={isSuperAdmin ? <SuperAdminPage /> : <Navigate to="/" replace />} />
           {/* Link privado que o dono manda ao cliente: não aparece em menu nenhum */}
           <Route path="/assinatura/:token" element={<SubscriptionSetupPage />} />
 
@@ -236,7 +265,9 @@ export default function App() {
 
       <nav
         aria-label="Navegação inferior"
-        className="fixed bottom-0 left-0 right-0 z-40 flex items-stretch justify-around border-t border-line bg-surface/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+        className={`fixed bottom-0 left-0 right-0 z-40 flex items-stretch justify-around border-t border-line bg-surface/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur ${
+          isAdmin ? 'xl:hidden' : 'lg:hidden'
+        }`}
       >
         {navLinks.map((item) => (
           <NavLink
@@ -274,7 +305,7 @@ export default function App() {
         )}
       </nav>
 
-      <footer className="border-t border-line bg-surface pb-24 pt-6 text-sm text-ink-muted lg:pb-6">
+      <footer className={`border-t border-line bg-surface pb-24 pt-6 text-sm text-ink-muted ${isAdmin ? 'xl:pb-6' : 'lg:pb-6'}`}>
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
             <p>Studio 85 · Estética automotiva</p>

@@ -16,4 +16,5 @@ export * from './schemas/appointment';
 export * from './schemas/whatsapp';
 export * from './schemas/payments';
 export * from './schemas/subscriptions';
+export * from './schemas/platform';
 export * from './seo';

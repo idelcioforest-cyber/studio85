@@ -3,6 +3,10 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { toZonedDateString } from '../../common/utils/timezone.util';
+
+// O dia conta no fuso da loja (o mesmo das telas do painel)
+const ACTIVITY_TIMEZONE = 'America/Sao_Paulo';
 
 export interface JwtPayload {
   sub: string;
@@ -31,6 +35,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  // Último dia já gravado de cada usuário: grava no banco só a primeira requisição do dia
+  private readonly activeDay = new Map<string, string>();
+
+  /** Marca que o usuário usou o app logado hoje (indicador "usuários que entraram" do super admin) */
+  private recordActivity(userId: string) {
+    const day = toZonedDateString(new Date(), ACTIVITY_TIMEZONE);
+    if (this.activeDay.get(userId) === day) return;
+    this.activeDay.set(userId, day);
+    this.prisma.userActivityDay
+      .createMany({ data: [{ userId, day }], skipDuplicates: true })
+      .catch(() => this.activeDay.delete(userId));
+  }
+
   async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
@@ -48,6 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const roles = user.roles.map((r) => r.role.name);
+    this.recordActivity(user.id);
 
     return {
       id: user.id,

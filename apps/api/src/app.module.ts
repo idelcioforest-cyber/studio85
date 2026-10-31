@@ -23,6 +23,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { PagarmeModule } from './modules/pagarme/pagarme.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 
 @Module({
@@ -52,6 +53,7 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     WhatsAppModule,
     PagarmeModule,
     SubscriptionsModule,
+    PlatformModule,
     RevenueModule,
   ],
   providers: [

@@ -59,9 +59,36 @@ model User {
   auditLogs          AuditLog[]
   legalAcceptances   LegalAcceptance[]
   subscriptions      CustomerSubscription[]
+  activityDays       UserActivityDay[]
 
   @@index([status])
   @@map("users")
+}
+
+// Um registro por usuário por dia em que usou o app logado (indicador "usuários que entraram")
+model UserActivityDay {
+  userId    String   @map("user_id")
+  day       String   @db.VarChar(10) // AAAA-MM-DD no fuso da loja
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+  @@index([day])
+  @@map("user_activity_days")
+}
+
+// Medição anônima: um código aleatório por aba do navegador conta uma vez por etapa por dia
+model SiteEvent {
+  id        String   @id @default(uuid())
+  type      String   @db.VarChar(30) // visit, booking_open, booking_slot, booking_done
+  sessionId String   @map("session_id") @db.VarChar(40)
+  day       String   @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([sessionId, type, day])
+  @@index([type, day])
+  @@map("site_events")
 }
 
 model Role {

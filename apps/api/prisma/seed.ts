@@ -33,6 +33,7 @@ async function main() {
     { name: 'ATTENDANT', description: 'Atendente da recepção e check-in' },
     { name: 'WASHER', description: 'Lavador e técnico operacional' },
     { name: 'CLIENT', description: 'Cliente do lava-rápido' },
+    { name: 'SUPER_ADMIN', description: 'Dono da plataforma: indicadores de uso' },
   ];
 
   for (const role of roles) {
@@ -261,7 +262,7 @@ Dúvidas sobre estes termos podem ser enviadas pelo WhatsApp do Studio 85. Fica 
     },
     {
       slug: 'privacy_policy',
-      version: '1.0',
+      version: '1.1',
       title: 'Política de Privacidade',
       contentMarkdown: `Esta Política explica como o **Studio 85** trata os seus dados pessoais, de acordo com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
 
@@ -303,7 +304,7 @@ Você pode pedir a qualquer momento: confirmação de que tratamos seus dados, a
 
 ## 7. Cookies e armazenamento no navegador
 
-Usamos um cookie de sessão, necessário para manter você conectado com segurança, e guardamos no navegador a sua preferência de tema claro ou escuro. Não usamos cookies de publicidade.
+Usamos um cookie de sessão, necessário para manter você conectado com segurança, e guardamos no navegador a sua preferência de tema claro ou escuro. Para melhorar o app, contamos de forma anônima quantas pessoas abrem o site e o agendamento: o navegador gera um código aleatório que vale só enquanto a aba está aberta e não identifica você. Não usamos cookies de publicidade.
 
 ## 8. Alterações
 
