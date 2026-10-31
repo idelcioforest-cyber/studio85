@@ -143,7 +143,7 @@ export default function AdminFinanceiroPage() {
             {pending.map((a) => (
               <li key={a.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <CarSummary appointment={a} />
-                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
                   <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusBadge[a.status]}`}>
                     {statusLabels[a.status]}
                   </span>

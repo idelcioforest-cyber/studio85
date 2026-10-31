@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "build:seed": "tsc prisma/seed.ts --outDir dist-seed --module commonjs --target es2022 --esModuleInterop --skipLibCheck --types node",
     "format": "prettier --write \"src/**/*.ts\"",
-    "start": "nest start",
-    "dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
+    "start": "node --enable-source-maps dist/main",
+    "dev": "tsc -p tsconfig.json --incremental --tsBuildInfoFile dist/.tsbuildinfo && concurrently -k -n TSC,API \"tsc -p tsconfig.json --watch --preserveWatchOutput --incremental --tsBuildInfoFile dist/.tsbuildinfo\" \"node --watch --enable-source-maps dist/main\"",
+    "start:debug": "node --inspect --enable-source-maps dist/main",
     "start:prod": "node dist/main",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -41,8 +41,6 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.24",
-    "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.2.8",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
