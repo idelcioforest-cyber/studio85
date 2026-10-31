@@ -49,6 +49,29 @@
     "tmp": "^0.2.7",
     "ajv@^8": "^8.20.0",
     "webpack": "^5.112.2",
-    "js-yaml@^5": "^5.5.0"
+    "js-yaml@^5": "^5.5.0",
+    "tailwindcss": {
+      "postcss-selector-parser": "^7.1.6"
+    },
+    "postcss-nested": {
+      "postcss-selector-parser": "^7.1.6"
+    },
+    "workbox-build": {
+      "glob": "^14.0.2",
+      "@trickfilm400/rollup-plugin-off-main-thread": "^4.0.0"
+    },
+    "@jest/reporters": {
+      "glob": "^14.0.2"
+    },
+    "jest-config": {
+      "glob": "^14.0.2"
+    },
+    "jest-runtime": {
+      "glob": "^14.0.2"
+    },
+    "test-exclude": {
+      "glob": "^14.0.2",
+      "minimatch": "^11.0.1"
+    }
   }
 }
